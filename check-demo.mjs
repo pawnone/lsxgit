@@ -1,0 +1,62 @@
+// Local prototype UI checks only. Does not connect to a shop or execute listing scripts.
+import path from 'node:path';import fs from 'node:fs/promises';import {createRequire} from 'node:module';import {fileURLToPath,pathToFileURL} from 'node:url';import assert from 'node:assert/strict';
+const here=path.dirname(fileURLToPath(import.meta.url));
+const root=path.resolve(process.argv[2]||here);
+const {chromium}=createRequire(path.join(root,'package.json'))('playwright-core');
+const report={appName:'文青尚品',scope:'multi-shop-desktop-ui-prototype',realStoreOperations:0,checks:[],errors:[],externalRequests:[],screenshots:[]};
+const b=await chromium.launch({headless:true,...(process.env.PW_CHANNEL?{channel:process.env.PW_CHANNEL}:{})});const context=await b.newContext({viewport:{width:1500,height:1180},deviceScaleFactor:1,acceptDownloads:true});
+await context.route(/^https?:/,r=>{report.externalRequests.push(r.request().url());return r.abort();});
+const p=await context.newPage();p.setDefaultTimeout(5000);p.on('pageerror',e=>report.errors.push(e.message));
+const act=(a,scope=p)=>scope.locator(`[data-action="${a}"]`).first();
+const shopInput=id=>p.locator(`[data-shop-id="${id}"]`);
+const verify=async id=>{const scope=await p.getByRole('dialog').count()?p.getByRole('dialog'):p;await scope.locator(`[data-action="verify-shop"][data-shop="${id}"]`).first().click();await act('confirm-verify',p.getByRole('dialog')).click();await p.getByRole('dialog').waitFor({state:'hidden'});};
+const ok=(name,detail)=>{report.checks.push({name,ok:true,...(detail?{detail}:{})});console.log('PASS',name);};
+const shot=async name=>{await p.locator('#toast').evaluate(e=>e.classList.remove('show'));await p.evaluate(()=>window.scrollTo(0,0));await p.waitForTimeout(250);await p.screenshot({path:path.join(here,'screenshots',name),fullPage:!await p.getByRole('dialog').count()});report.screenshots.push(name);};
+try{
+ await p.goto(pathToFileURL(path.join(here,'demo/index.html')).href);await p.getByRole('heading',{name:'批量上架',exact:true}).waitFor();
+ assert.match(await p.title(),/文青尚品/);assert.match(await p.locator('.brand').innerText(),/文青尚品/);ok('品牌与标题统一为文青尚品');
+ assert.equal(await p.locator('[data-shop-id]:checked').count(),1);assert.equal(await p.locator('[data-task-total]').innerText(),'2 个草稿任务');ok('默认仅选1店，2件商品生成2个任务，不默认全选');
+ assert.match(await p.locator('[data-shop-row="dou-qing"]').innerText(),/已登录[\s\S]*未核对/);assert.match(await p.locator('[data-shop-row="dou-demo"]').innerText(),/未登录[\s\S]*未核对/);ok('每家店分别显示登录与核对状态');
+ await shopInput('dou-qing').check();assert.match(await p.locator('[data-task-total]').innerText(),/^4 /);ok('选择2店后实时显示2商品×2店=4个任务');
+ await act('check').click();await p.getByRole('dialog').getByRole('heading',{name:'先完成所选店铺的登录与核对',exact:true}).waitFor();assert.equal(await p.getByRole('dialog').locator('[data-pending-shop]').count(),1);assert.equal(await p.locator('[data-action="confirm-run"]').count(),0);ok('选中未核对店铺时阻断整批，明确待处理目标');
+ await verify('dou-qing');assert.match(await p.locator('[data-shop-row="dou-qing"]').innerText(),/已核对/);assert.match(await p.locator('[data-shop-row="dou-demo"]').innerText(),/未核对/);ok('核对只更新指定店铺，不批量标记通过');
+ await shopInput('dou-demo').check();assert.match(await p.locator('[data-task-total]').innerText(),/^6 /);
+ await act('check').click();await p.getByRole('dialog').locator('[data-action="login"][data-shop="dou-demo"]').click();
+ await p.getByRole('dialog').getByText('等待你在浏览器中完成登录',{exact:true}).waitFor();await act('finish-login',p.getByRole('dialog')).click();await p.getByRole('dialog').waitFor({state:'hidden'});
+ assert.match(await p.locator('[data-shop-row="dou-demo"]').innerText(),/已登录[\s\S]*未核对/);ok('未登录阻断，模拟登录后仍需单独核对');
+ await verify('dou-demo');await act('check').click();await act('review').click();assert.equal(await p.getByRole('dialog').locator('[data-task-row]').count(),6);ok('2商品×3店的确认表准确生成6条任务');
+ await p.keyboard.press('Escape');await p.getByRole('dialog').waitFor({state:'hidden'});await shopInput('dou-demo').uncheck();
+ await shopInput('dou-xing').uncheck();await shopInput('dou-qing').uncheck();assert.match(await p.locator('[data-task-total]').innerText(),/^0 /);await act('check').click();assert.match(await p.locator('#toast').innerText(),/至少选择一家店铺/);ok('零店铺明确阻断，不产生任务');
+ await shopInput('dou-xing').check();await shopInput('dou-qing').check();
+ await p.locator('[data-product="1"]').uncheck();assert.match(await p.locator('[data-task-total]').innerText(),/^2 /);await p.locator('[data-product="1"]').check();ok('商品选择会重新计算任务，且清除旧预检结果');
+ await p.locator('[data-action="preview"][data-id="1"]').click();await p.getByRole('dialog').getByText('WQ261-test上衣【单件】S',{exact:true}).waitFor();assert.match(await p.getByRole('dialog').locator('.kv-grid').innerText(),/组合件数\s*单件/);ok('商品01保留单件及用户编码预览');await p.keyboard.press('Escape');await p.getByRole('dialog').waitFor({state:'hidden'});
+ await act('folder').click();await p.locator('#root-input').fill('D:/文青商品 素材库');await act('save-folder',p.getByRole('dialog')).click();assert.match(await p.locator('.path-text').innerText(),/D:\/文青商品 素材库/);ok('目录交互保留中文与空格（非磁盘读取测试）');
+ await act('folder').click();await p.locator('#root-input').fill('~/Desktop/商品自动上架素材库');await act('save-folder',p.getByRole('dialog')).click();
+ await act('check').click();await shot('01-文青尚品-网页多店工作台.png');
+ await act('review').click();const rows=p.getByRole('dialog').locator('[data-task-row]');assert.equal(await rows.count(),4);
+ assert.deepEqual(await rows.evaluateAll(es=>es.map(e=>e.dataset.taskRow)),['dou-xing--1','dou-xing--2','dou-qing--1','dou-qing--2']);assert.equal(await p.getByRole('dialog').getByText('仅保存草稿',{exact:true}).count(),4);ok('开始前列清商品、店铺、4个独立草稿任务，按店铺串行');
+ await shot('02-文青尚品-开始前任务确认.png');
+ await act('confirm-run',p.getByRole('dialog')).click();await p.getByRole('dialog').waitFor({state:'hidden'});
+ assert.equal(await shopInput('dou-xing').isDisabled(),true);assert.equal(await p.locator('[data-product="1"]').isDisabled(),true);assert.equal(await p.locator('[data-platform-switch="pdd"]').isDisabled(),true);assert.equal(await act('review').isDisabled(),true);ok('运行期间锁定商品、店铺、平台和重复启动');
+ await p.waitForTimeout(1700);await act('pause').click();const phase=await p.locator('.run-phase').innerText();await p.waitForTimeout(1100);assert.equal(await p.locator('.run-phase').innerText(),phase);ok('暂停后步骤不推进，任务选择仍锁定');
+ await act('resume').click();await act('block').click();await p.getByRole('heading',{name:'已停止 · 等待人工处理',exact:true}).waitFor();assert.equal(await p.locator('[data-action="resume"]').count(),0);assert.match(await p.locator('.task-table').innerText(),/未执行/);ok('验证码停止整批，保留未执行任务，不能直接继续');
+ await act('reset').click();await act('check').click();await act('review').click();await act('confirm-run',p.getByRole('dialog')).click();
+ await p.getByRole('heading',{name:'预演完成',exact:true}).waitFor({timeout:30000});assert.equal(await p.locator('.task-table').getByText('模拟已存草稿',{exact:true}).count(),4);assert.match(await p.locator('.run-title').innerText(),/未连接后台/);ok('同批2店×2商品串行预演完成，4条结果均明确为模拟');
+ await p.locator('[data-nav="history"]').click();assert.equal(await p.locator('tbody tr').count(),2);ok('历史分别保留安全停止批次和完成批次');
+ await p.locator('[data-nav="workbench"]').click();await act('reset').click();await shopInput('dou-qing').uncheck();
+ await p.locator('[data-nav="history"]').click();await p.locator('[data-action="run-details"]').first().click();assert.equal(await p.getByRole('dialog').locator('[data-task-row]').count(),4);assert.match(await p.getByRole('dialog').innerText(),/青青臻选好物1号仓/);ok('改变当前选择不影响历史冻结的4条任务与店铺');await p.keyboard.press('Escape');await p.getByRole('dialog').waitFor({state:'hidden'});
+ const pendingDownload=p.waitForEvent('download');await act('export').click();const d=await pendingDownload;assert.equal(d.suggestedFilename(),'文青尚品-界面预演报告.json');const file=await d.path();const exported=JSON.parse(await fs.readFile(file,'utf8'));assert.equal(exported.appName,'文青尚品');assert.equal(exported.realDraftsCreated,0);assert.equal(exported.history[0].plan.taskCount,4);ok('导出品牌正确，包含原批次任务快照且真实草稿数为0');
+ await p.locator('[data-nav="shops"]').click();await p.getByRole('heading',{name:'店铺管理',exact:true}).waitFor();await act('add-shop').click();await p.locator('#new-shop-name').fill('新添加演示店');await act('save-new-shop',p.getByRole('dialog')).click();await p.getByRole('dialog').waitFor({state:'hidden'});assert.match(await p.locator('.shop-list').first().innerText(),/新添加演示店/);ok('新增店铺保留未登录未核对，未自动加入本批');
+ await p.locator('[data-nav="workbench"]').click();assert.equal(await p.locator('[data-shop-id]:checked').count(),1);await p.locator('[data-platform-switch="pdd"]').click();assert.equal(await p.locator('[data-shop-id]').count(),2);assert.equal(await p.locator('[data-shop-id]:checked').count(),1);assert.equal(await p.locator('[data-action="review"]').count(),0);ok('平台切换只显示本平台店铺，拼多多不开放执行按钮');
+ await act('pdd-scope').click();assert.match(await p.getByRole('dialog').locator('.kv-grid').last().innerText(),/拼单价 \+ 单买价/);await p.keyboard.press('Escape');await p.getByRole('dialog').waitFor({state:'hidden'});ok('拼多多独立字段预览仍保留');
+ for(const view of ['materials','settings']){await p.locator(`[data-nav="${view}"]`).click();await p.locator('#main h1').waitFor();}ok('素材与设置页面正常导航');
+ await p.goto(pathToFileURL(path.join(here,'demo/desktop.html')).href);await p.getByRole('heading',{name:'批量上架',exact:true}).waitFor();
+ assert.match(await p.title(),/文青尚品.*桌面/);assert.equal(await p.locator('.desktop-titlebar').isVisible(),true);assert.equal(await p.locator('.mac-window-controls').isVisible(),true);ok('本地APP入口展示文青尚品及macOS窗口外观');
+ await shopInput('dou-qing').check();await verify('dou-qing');await act('check').click();await shot('03-文青尚品-macOS桌面APP.png');
+ await p.locator('[data-os-switch="windows"]').click();assert.equal(await p.locator('.win-window-controls').isVisible(),true);assert.equal(await p.locator('.mac-window-controls').isVisible(),false);await shot('04-文青尚品-Windows桌面APP.png');ok('Windows窗口外观可切换，共用同一多店任务逻辑');
+ for(const [width,height] of [[1920,1080],[1500,1180],[1280,800],[1024,768]]){await p.setViewportSize({width,height});const m=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));assert(m.scroll<=width,JSON.stringify(m));ok(`APP视口${width}×${height}无页面横向溢出`);}
+ await p.goto(pathToFileURL(path.join(here,'demo/index.html')).href);await p.setViewportSize({width:390,height:844});await p.waitForTimeout(150);assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);ok('网页Demo窄窗口无页面横向溢出');
+ assert.deepEqual(await p.locator('img').evaluateAll(es=>es.filter(e=>!e.complete||!e.naturalWidth).map(e=>e.src)),[]);assert.deepEqual(report.errors,[]);assert.deepEqual(report.externalRequests,[]);ok('所有本地资源加载，无JS异常，未向网站发出请求');
+ report.ok=true;
+}catch(e){report.ok=false;report.failure=e.stack;console.error(e);await p.screenshot({path:path.join(here,'screenshots','检查失败.png'),fullPage:true}).catch(()=>{});}
+finally{await b.close();await fs.writeFile(path.join(here,'demo-check.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({ok:report.ok,checks:report.checks.length,failure:report.failure},null,2));if(!report.ok)process.exitCode=1;}

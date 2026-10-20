@@ -1,0 +1,27 @@
+{
+  "name": "wenqing-shangpin",
+  "version": "0.2.0-demo",
+  "private": true,
+  "description": "文青尚品：多店铺商品草稿工作台与桌面APP交互原型",
+  "type": "commonjs",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "start": "node scripts/dev-server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:ui": "node check-demo.mjs",
+    "setup:browser": "playwright-core install chromium",
+    "build": "node scripts/build-demo.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pawnone/lsxgit.git"
+  }
+}

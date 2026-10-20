@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><title>文青尚品 · 多平台商品工作台</title>
+  <link rel="stylesheet" href="style.css"><script src="task-plan.js" defer></script><script src="app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#" aria-label="文青尚品首页"><span class="brand-icon"><img src="assets/icons/layers.svg" alt=""></span><span>文青尚品<small>商品自动化工作台</small></span></a>
+    <div class="workspace"><span class="workspace-avatar">文</span><div>我的工作空间<small>本机资料 · 本机执行</small></div><img class="icon" src="assets/icons/chevron-down.svg" alt=""></div>
+    <div class="nav-label">工作台</div>
+    <nav aria-label="主导航">
+      <button data-nav="workbench" class="nav active"><img src="assets/icons/layout-dashboard.svg" alt="">批量上架<span class="nav-count">2</span></button>
+      <button data-nav="materials" class="nav"><img src="assets/icons/folder-open.svg" alt="">商品素材库</button>
+      <button data-nav="shops" class="nav"><img src="assets/icons/store.svg" alt="">店铺管理</button>
+      <button data-nav="history" class="nav"><img src="assets/icons/history.svg" alt="">运行记录</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="local-status"><span class="status-dot"></span>本地工作模式<small>素材与登录资料保留在电脑</small></div><button class="nav" data-nav="settings"><img src="assets/icons/settings-2.svg" alt="">软件设置</button><div class="version">界面方案 v0.2 <span>2026.10</span></div></div>
+  </aside>
+  <div class="shell">
+    <header class="topbar"><div>工作空间 <span>/</span> <strong id="breadcrumb">批量上架</strong></div><div class="top-actions"><a class="preview-link" href="desktop.html"><img src="assets/icons/monitor.svg" alt="">桌面 APP 预览</a><span class="demo-pill">交互原型 · 全部为演示</span><button class="icon-button" aria-label="使用说明" data-action="help"><img src="assets/icons/circle-help.svg" alt=""></button><span class="user-avatar">W</span></div></header>
+    <main id="main"></main>
+    <footer class="app-footer"><span><img src="assets/icons/monitor.svg" alt="">桌面软件界面方案 · 支持 macOS / Windows 的产品规划</span><span>当前 Demo 不连接商家后台</span></footer>
+  </div>
+  <div id="overlay-root"></div><div id="toast" role="status"></div>
+</body>
+</html>

@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createDemoServer} from '../scripts/dev-server.mjs';
+async function fixture(t){const s=createDemoServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>s.close(r)));return 'http://127.0.0.1:'+s.address().port;}
+test('根路径可启动文青尚品桌面Demo，静态资源可读',async t=>{const u=await fixture(t);const r=await fetch(u);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/text\/html/);assert.match(await r.text(),/文青尚品.*桌面 APP Demo/);assert.equal((await fetch(u+'/app.js')).status,200);});
+test('不暴露仓库文件或任意本机文件',async t=>{const u=await fixture(t);assert.equal((await fetch(u+'/package.json')).status,404);assert.equal((await fetch(u+'/%2e%2e%2fpackage.json')).status,403);assert.equal((await fetch(u+'/missing.png')).status,404);});
+test('HEAD无正文，写入请求被拒绝',async t=>{const u=await fixture(t);const r=await fetch(u,{method:'HEAD'});assert.equal(r.status,200);assert.equal(await r.text(),'');assert.equal((await fetch(u,{method:'POST',body:'test'})).status,405);});
