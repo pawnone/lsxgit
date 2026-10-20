@@ -1,0 +1,27 @@
+{
+  "sourceVersion": "0.2.17",
+  "source": "既有抖店草稿执行器；集成时核对来源hash",
+  "originalSha256": {
+    "shop-guard.mjs": "bbd3f746c2125cfe453a652f065286ab9d0f903f4101812707e7cac00d825d9d",
+    "safety-guard.mjs": "00f75a151dfccd22e9104297efbbfdb9440388e8ea7b8c02e57bae007d0084c6",
+    "managed-browser.mjs": "8c7989f3fb6f0e899c8ef7beaa787d4b1a4b3491fc9d4e2f10d91c4d95177a8a",
+    "scan-products.mjs": "66e1a270f771815eac4d9e83cb1015da7a62db339465139615e8abb49d5cb0eb",
+    "prepare-product.mjs": "0682148a00597216a8ede0456ef66e58c448dee5e98d0c26e2c58f5be30711df",
+    "listing-rules.mjs": "bb58e23a342044c2a698961014459e0c091543839e6c1df81f5c8d2217116e53",
+    "excel-product.mjs": "bec08d6eaf785f17fa6e8921af0ea3f4432aa4a1a955e6cc1ae520c01e1ba583",
+    "run-draft.mjs": "011cb4109d6e02b41439469469df962f49abb3889b0d88c897610fcab3505fc3",
+    "save-draft.mjs": "12453f764a7101d192281b9a6756dba7355b49843217b961cc3a55848fa3a52f",
+    "platforms/doudian.mjs": "d56d179b1f245d991c45ccbe56dd80aed2ccf1b3f43dbbf298b495b4008dd149",
+    "product-attributes.mjs": "8f5b07c55d9f479e14f60a02feb10af2f01319c94a6cdfd117abc30c975a3838",
+    "spec-images.mjs": "246b81015f838e5c74c011f6c320793420cf030269dd12ddbdee3a7e38e6d5ab",
+    "listing-fields.mjs": "c922ed487512c4f6eb0419b9bb2223e94ef3bc9a86f23b974dea90571ad856cb",
+    "material-entry.mjs": "2265755262b44ee4cc8c0e1f37810182245ebca0f4fa7590ef86835d3a9f005b",
+    "entry-state.mjs": "72691fdda9a8cf5d86ade4e8855342d08b6a460ec6063107f4d0507749432869",
+    "spec-reconcile.mjs": "ef1f53920016592398b53fea024878c43d4ccc4d676e13fc9a3569428d0a081a"
+  },
+  "adaptations": [
+    "run-draft: 可导入验证/执行函数、结构化进度、输出目录参数",
+    "safety-guard: 轮询检测可见安全限制并立即断开自动化",
+    "shop-guard: 店名等待失败时优先回报已锁定的安全拦截原因"
+  ]
+}

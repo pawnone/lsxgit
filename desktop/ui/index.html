@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' wqasset: data:; connect-src 'none'; object-src 'none'; base-uri 'none'"
+    />
+    <title>文青尚品</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="native.css" />
+    <script src="task-plan.js" defer></script>
+    <script src="renderer.js" defer></script>
+  </head>
+  <body class="native-app">
+    <div class="native-titlebar">
+      <strong>文青尚品</strong><span>本机运行 · 抖店草稿</span>
+    </div>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon"
+          ><img src="assets/icons/layers.svg" alt="" /></span
+        ><span>文青尚品<small>商品自动化工作台</small></span>
+      </div>
+      <div class="workspace">
+        <span class="workspace-avatar">文</span>
+        <div>本机工作空间<small>登录资料只保留在电脑</small></div>
+      </div>
+      <div class="nav-label">工作台</div>
+      <nav>
+        <button class="nav active" data-nav="workbench">
+          <img src="assets/icons/layout-dashboard.svg" alt="" />批量上架</button
+        ><button class="nav" data-nav="shops">
+          <img src="assets/icons/store.svg" alt="" />店铺管理</button
+        ><button class="nav" data-nav="history">
+          <img src="assets/icons/history.svg" alt="" />运行记录</button
+        ><button class="nav" data-nav="settings">
+          <img src="assets/icons/settings-2.svg" alt="" />软件设置
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="local-status">
+          <span class="status-dot"></span>抖店执行器已接入<small
+            >仅保存草稿 · 无模型依赖</small
+          >
+        </div>
+        <div class="version" id="version"></div>
+      </div>
+    </aside>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          本机工作空间 <span>/</span><strong id="breadcrumb">批量上架</strong>
+        </div>
+        <span class="badge blue">仅保存草稿</span>
+      </header>
+      <main id="main"><p>正在读取本机配置…</p></main>
+      <footer class="app-footer">
+        <span>文青尚品 · 素材与运行记录保留在本机</span
+        ><span>遇验证码 / 安全限制立即停止</span>
+      </footer>
+    </div>
+    <div id="overlay-root"></div>
+    <div id="toast" role="status"></div>
+    <div id="busy-cover" hidden>处理中，请稍候…</div>
+  </body>
+</html>

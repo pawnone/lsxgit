@@ -24,3 +24,6 @@ demo-check.json
 screenshots/检查失败.png
 screenshots/文青尚品-桌面初稿.png
 dist/
+release/
+.native-test-data/
+*.app/

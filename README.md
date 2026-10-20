@@ -1,63 +1,60 @@
-# 文青尚品：软件规划与界面 Demo
+# 文青尚品
 
-- **本地 APP 页面**：双击 `demo/desktop.html`，可以切换 macOS / Windows 窗口外观。
-- **网页页面**：双击 `demo/index.html`，使用相同的商品、店铺和任务逻辑。
-- 两个入口都不需要安装依赖。桌面窗口控制仅演示外观；这不是 Electron 安装包。
-- `软件规划方案.md`：软件选型、平台能力差异、店铺多选与任务矩阵、实施顺序。
-- `screenshots/`：最新网页与桌面 APP 实际渲染截图。
-- `检查结果.md`、`demo-check.json`：本地交互检查，不是真实上架验收。
+本机桌面 APP，使用已有抖店 Playwright 执行器读取本机 Excel 和素材，逐店、逐商品保存草稿。运行不依赖 Workbuddy、Codex、模型接口或系统 Node.js。
 
-可体验：同平台店铺多选、逐店登录与核对、未就绪阻断、商品勾选、目录交互、商品预览、开始前完整任务清单、冻结任务、串行预演、暂停/继续、安全停止、历史快照与报告导出。
+当前版本 **v0.3.0-alpha**：macOS Apple 芯片本机测试版。已接入抖店；拼多多保留入口，尚未开放执行。当前抖店适配范围为 **服装 > 女装 > 时尚套装、5张主图、现货预售混合**，不能据此推定支持其他类目、Windows 或所有后台改版。
 
-默认仅勾选一家店。想预演两店时，主动勾选“青青臻选好物1号仓”，先点该店“核对店铺”，确认模拟核对，再检查本批素材。2件商品×2家店铺会列出4个草稿任务。第三家示例店未登录，可以演示登录后仍需核对的过程。
+## 直接使用 Mac APP
 
-**所有登录、核对、检查和进度均为演示。** 原型不读取真实Excel内容、不连接店铺、不上传商品、不创建真实草稿。没有修改现有上架脚本、skill、商品资料或分发包。拼多多仍只有资料检查预览，浏览器执行未开放。
+1. 打开 `文青尚品.app`。本机需已安装 Google Chrome，无需填写端口。
+2. 添加后台显示的完整店名，点击“登录”，在专用 Chrome 中人工登录。每店使用独立资料目录；APP不会复制其他浏览器的 Cookie。
+3. 回到 APP 点击该店“核对”。页面实际店名必须精确一致，不能用“浏览器已打开”代替核对成功。
+4. 点击“选择文件夹”，选择总素材库。一级子文件夹各代表一个商品，读取其中的 `商品信息/商品信息.xlsx` 和素材目录。错误显示到商品、字段或路径，不猜填。
+5. 勾选店铺和商品，检查本批素材，确认完整的商品 × 店铺任务清单，再开始。新增店铺不会默认全选。
+6. 在运行记录查看结果。只有取得保存成功证据才标为“已保存草稿”。
 
-使用现有测试素材图片，Lucide图标许可证随 `demo/assets/icons/LICENSE` 保存。
+**仅保存草稿，不提供正式发布。** 验证码、安全限制或权限拒绝会停止整批并保留 Chrome；人工处理后需重新核对。APP不解验证码，不伪装浏览器，不自动绕过或恢复。暂停、停止和正常退出以当前商品为边界，避免在保存中途杀进程。
 
-## 开发与版本控制
+已有确认草稿会跳过，跳过不算本次新保存。保存结果未知会阻断；不要删回执、更换任务目录或重复点开始。崩溃重启会将中断任务标为待核实，保留原始记录。
 
-仓库：https://github.com/pawnone/lsxgit ，分支 `master`。当前版本 `v0.2.0-demo`，属于交互原型。
+Excel 中商家编码由用户提供，原样保留，不自动生成。价格只读现有统一售价及个别尺码调整；组合件数、年龄、风格及“对应主图编号”继续使用原字段。没有另造一套 APP 商品模板。
 
-需要 Node.js 22 或以上。Mac终端、Windows PowerShell均可运行：
+## 数据存放
+
+APP配置、运行记录和每店浏览器资料在 macOS 用户的应用数据目录（`~/Library/Application Support/文青尚品/`），素材留在你选择的原目录。换电脑需重新选择本机素材库、添加店铺并登录，不复制 Cookie。
+
+- `config.json`：路径、店铺与勾选项；每次打开重新核对登录状态。
+- `tasks/`：按店铺ID、商品ID、内容版本固定的保存意图和原始回执。
+- `runs/`：不可随当前选择改变的批次快照与日志。
+- `browser-profiles/`：独立 Chrome 登录资料。关闭 APP 不关闭这些浏览器。
+
+本机依赖 Chrome 和正常平台访问；去掉智能体调度不会让网络上传自动变快。首版本机包仅做开发签名，未做外部分发签名、公证和自动更新，不是已验收的 Windows 安装包。
+
+## 开发与检查
+
+仓库：https://github.com/pawnone/lsxgit 。源码开发需 Node.js 22.12 或以上。
 
 ```sh
-git clone https://github.com/pawnone/lsxgit.git
-cd lsxgit
 npm ci
-npm run dev
-```
-
-打开终端输出的地址，默认 `http://127.0.0.1:5173/` 展示桌面APP外观；`/index.html` 展示网页入口。端口占用时通过环境变量 `PORT` 设置其他端口。可将 `HOST` 设为开发容器需要的监听地址，默认只监听本机。
-
-本项目当前运行时只用Node内置模块提供静态Demo，不需要数据库、模型API、店铺账号或真实商品资料。`npm ci` 安装的是锁定的开发测试依赖。
-
-```sh
+npm start
 npm run check
 npm test
-npm run build
+npm run test:native
+npm run build:mac
 ```
 
-`build` 仅生成 `dist/` 静态界面，不生成 `.app`、`.dmg` 或 `.exe`。尚未接入Electron壳或真实上架执行器。
+`npm start` / `npm run app` 打开真实 Electron APP；`build:mac` 使用当前 Mac 架构生成 `release/文青尚品-darwin-arm64/文青尚品.app`（Apple芯片）。运行产物已包含 Electron 的 Node 运行时及生产依赖。
 
-UI检查需准备测试浏览器：
+`npm run test:native` 使用临时、独立的测试数据目录验证实际原生 APP，无真实店铺写入。可通过 `WQ_TEST_APP` 指向打包后的可执行文件，通过 `WQ_TEST_MATERIALS` 指向本机素材库增加只读 Excel/图片检查；不把这些本机路径写进项目配置。`node scripts/check-safety.mjs` 仅在本地模拟页面验证安全停止和浏览器保留。
 
-```sh
-npm run setup:browser
-npm run test:ui
-```
-
-Linux容器若缺浏览器系统依赖，可按Playwright环境要求安装；UI检查不会连接商家后台。已安装Chrome的开发电脑也可通过 `PW_CHANNEL=chrome` 使用本机Chrome进行无头测试。
-
-代码结构：
+早期外观 Demo 仍保留：`npm run demo` 启动网页，`npm run build:demo` 生成静态文件；`npm run test:ui` 检查模拟交互。Demo不是实际执行入口，不能将其模拟结果当作真实草稿回执。
 
 ```text
-demo/             网页与桌面外观，含共享任务模型和本地资源
-scripts/          静态开发服务、语法检查和静态构建
-test/             任务矩阵、身份门禁、快照和服务测试
-check-demo.mjs    离线UI交互检查
-screenshots/      当前版本的界面截图
-软件规划方案.md    能力边界与实施路线
+desktop/            Electron主进程、隔离preload、任务服务、原生页面与worker
+engine/doudian/     既有0.2.17执行器的集成快照及来源哈希
+scripts/            打包、语法、原生APP及本地安全检查
+test/               多店队列、身份/资料/安全门禁、恢复与重复保护测试
+demo/               早期交互原型及共享图标/样式
 ```
 
-提交前运行检查与测试；不提交 `node_modules`、`dist`、登录profile、Cookie、真实Excel、视频或执行回执。第三方许可与示例素材声明见 `THIRD_PARTY_NOTICES.md`。当前仓库不是开源许可授权，项目代码标为UNLICENSED。
+检查结果与限制见 `APP检查记录.md`；版本见 `CHANGELOG.md`。不提交密码、Cookie、登录资料、真实 Excel、视频、回执或本机配置。第三方许可见 `THIRD_PARTY_NOTICES.md`。

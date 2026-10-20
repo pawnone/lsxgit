@@ -1,0 +1,170 @@
+.native-titlebar {
+  height: 36px;
+  position: fixed;
+  inset: 0 0 auto;
+  background: #f6f7fa;
+  border-bottom: 1px solid #e6e9f0;
+  z-index: 40;
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  font-size: 11px;
+  color: #697488;
+}
+.native-titlebar strong {
+  color: #475166;
+  font-weight: 550;
+}
+.native-titlebar span {
+  font-size: 9px;
+  color: #9aa1af;
+}
+.native-app .sidebar {
+  top: 36px;
+  background: #fbfcfe;
+}
+.native-app .shell {
+  padding-top: 36px;
+}
+.native-app .overlay {
+  top: 36px;
+}
+.native-app main {
+  min-height: calc(100vh - 149px);
+}
+.native-app .brand {
+  font-size: 21px;
+}
+.native-app .nav-label {
+  margin-top: 25px;
+}
+.native-app .topbar {
+  height: 61px;
+}
+.native-app .panel .empty-note {
+  padding: 35px 23px;
+}
+.native-app .readiness {
+  position: sticky;
+  top: 25px;
+}
+.native-app .workspace {
+  margin-bottom: 20px;
+}
+.native-app .shop-list {
+  margin-bottom: 18px;
+}
+.error-box {
+  margin-bottom: 18px;
+  background: #fff3ed;
+  border: 1px solid #f2dace;
+  color: #985735;
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 14px 17px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.native-app table th,
+.native-app table td {
+  font-size: 11px;
+}
+.native-app .product-name {
+  max-width: 330px;
+  overflow-wrap: anywhere;
+}
+.native-app .progress-fill {
+  transition: width 0.4s;
+}
+.native-app .modal {
+  max-height: 80vh;
+  overflow: auto;
+}
+#busy-cover {
+  position: fixed;
+  inset: 36px 0 0;
+  z-index: 50;
+  background: #eef3f9a8;
+  backdrop-filter: blur(1px);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #4b638c;
+}
+#busy-cover[hidden] {
+  display: none;
+}
+.native-app .log-lines {
+  max-height: 250px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.native-app .task-table {
+  max-height: 450px;
+  overflow: auto;
+}
+.native-app .task-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.subtle {
+  color: var(--muted);
+  font-size: 11px;
+}
+.native-app .product-thumb {
+  flex: none;
+}
+.scan-error {
+  padding: 13px 22px;
+  border-top: 1px solid var(--line);
+  color: #99603b;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+.scan-error strong {
+  display: block;
+}
+.native-app .panel h3 {
+  font-size: 13px;
+}
+.native-app .kv-grid {
+  overflow-wrap: anywhere;
+}
+.native-app .check-list {
+  padding-top: 4px;
+}
+
+.native-app .overlay.leaving {
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.native-app .overlay.leaving .drawer,
+.native-app .overlay.leaving .modal {
+  transform: translateY(12px);
+  transition: transform 0.16s ease;
+}
+::view-transition-old(root) {
+  animation: nativeExit 0.16s ease both;
+}
+::view-transition-new(root) {
+  animation: fadeIn 0.2s ease both;
+}
+@keyframes nativeExit {
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.001ms;
+  }
+  .native-app .overlay.leaving {
+    transition: none;
+  }
+}

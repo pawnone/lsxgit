@@ -1,27 +1,39 @@
 {
   "name": "wenqing-shangpin",
-  "version": "0.2.0-demo",
+  "version": "0.3.0-alpha",
   "private": true,
-  "description": "文青尚品：多店铺商品草稿工作台与桌面APP交互原型",
+  "description": "文青尚品本机桌面APP：抖店多店多商品自动保存草稿",
   "type": "commonjs",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "start": "node scripts/dev-server.mjs",
+    "start": "electron .",
     "check": "node scripts/check.mjs",
     "test": "node --test test/*.test.mjs",
     "test:ui": "node check-demo.mjs",
     "setup:browser": "playwright-core install chromium",
-    "build": "node scripts/build-demo.mjs"
+    "build": "node scripts/build-mac.mjs",
+    "app": "electron .",
+    "demo": "node scripts/dev-server.mjs",
+    "build:demo": "node scripts/build-demo.mjs",
+    "build:mac": "node scripts/build-mac.mjs",
+    "test:native": "node scripts/check-native.mjs",
+    "test:safety": "node scripts/check-safety.mjs"
   },
   "devDependencies": {
-    "playwright-core": "1.64.0"
+    "@electron/packager": "20.3.0",
+    "electron": "44.9.1"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/pawnone/lsxgit.git"
-  }
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "playwright-core": "1.64.0"
+  },
+  "main": "desktop/main.cjs"
 }
