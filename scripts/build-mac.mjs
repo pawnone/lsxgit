@@ -29,7 +29,7 @@ const out = await packager({
   electronVersion: pkg.devDependencies.electron,
   appBundleId: "com.wenqing.shangpin",
   appVersion: pkg.version,
-  buildVersion: "0.3.0",
+  buildVersion: pkg.version.split("-")[0],
   overwrite: true,
   prune: true,
   asar: false,

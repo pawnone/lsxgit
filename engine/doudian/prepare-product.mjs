@@ -254,7 +254,7 @@ function mergeCanonical(info, assets, options) {
       materialPercent: product.materialPercent ?? null,
       materialTagImage: product.materialTagImage || assets.materialTagImage || "",
       whiteBackgroundImage: product.whiteBackgroundImage || '',
-      whiteBackgroundFor: product.whiteBackgroundFor || '', 
+      whiteBackgroundFor: product.whiteBackgroundFor || '',
       mainImages: assets.mainImages,
       video: assets.video || "",
       mainImage34: product.mainImage34 || "smart-crop-from-1to1",

@@ -13,7 +13,7 @@ const failureType = (e) =>
       ? "needs-review"
       : "failed";
 export class ListingService extends EventEmitter {
-  constructor({ root, runner, browser, version = "0.3.0-alpha" } = {}) {
+  constructor({ root, runner, browser, version = "0.3.1-alpha" } = {}) {
     super();
     Object.assign(this, { root, runner, browser, version });
     this.store = new Store(root);

@@ -1,4 +1,4 @@
-文青尚品 v0.3.0-alpha · 苹果电脑本机测试版
+文青尚品 v0.3.1-alpha · 苹果电脑本机测试版
 
 直接双击“文青尚品.app”。本机需要Google Chrome；不需要Workbuddy、Codex或另装Node。
 

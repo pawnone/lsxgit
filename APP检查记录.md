@@ -1,4 +1,4 @@
-# v0.3.0-alpha 本机APP检查记录
+# v0.3.1-alpha 本机APP检查记录
 
 日期：2026-10-20。环境：macOS 26.5.1、Apple arm64、Google Chrome。版本是本机测试版；独立于早期网页Demo。
 

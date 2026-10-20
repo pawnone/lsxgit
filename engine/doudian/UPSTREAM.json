@@ -22,6 +22,7 @@
   "adaptations": [
     "run-draft: 可导入验证/执行函数、结构化进度、输出目录参数",
     "safety-guard: 轮询检测可见安全限制并立即断开自动化",
-    "shop-guard: 店名等待失败时优先回报已锁定的安全拦截原因"
+    "shop-guard: 店名等待失败时优先回报已锁定的安全拦截原因",
+    "prepare-product: 清理继承的行尾空白，逻辑不变"
   ]
 }
