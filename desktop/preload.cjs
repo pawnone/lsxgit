@@ -11,9 +11,11 @@ contextBridge.exposeInMainWorld("wqapp", {
   addShop: (name, platform) => invoke("add-shop", { name, platform }),
   select: (selection) => invoke("select", selection),
   openLogin: (id) => invoke("open-login", { id }),
+  newLogin: (id) => invoke("open-login", { id, fresh: true }),
+  refreshShops: () => invoke("refresh-shops"),
   verifyShop: (id, acknowledgeSafety = false) =>
     invoke("verify", { id, acknowledgeSafety }),
-  check: () => invoke("check"),
+  check: (mode = "normal") => invoke("check", { mode }),
   start: (token) => invoke("start", { token }),
   pause: () => invoke("pause"),
   resume: () => invoke("resume"),

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {reconcileSpecs,verifySpecs} from './spec-reconcile.mjs';
+import {assertBlankProductEntry} from './workspace.mjs';
 import {resolveEntry} from './entry-state.mjs';
 import {uploadMaterialEntry,waitMaterialEntryReady} from './material-entry.mjs';
 import {installSafetyGuard,assertSafetyClear} from './safety-guard.mjs';
@@ -423,8 +424,8 @@ async function executeDraft(config, validation, options) {
   OUTPUT_DIR = options.outputDir || OUTPUT_DIR;
   const playwright = await loadPlaywright();
   const cdpUrl = options.cdpUrl || config.cdpUrl || "http://127.0.0.1:9222";
-  const browser = await playwright.chromium.connectOverCDP(cdpUrl);
-  let page = await choosePage(browser);
+  const browser = options.browser || await playwright.chromium.connectOverCDP(cdpUrl);
+  let page = options.page || await choosePage(browser);
   const events = [];
   const environment={browser:browser.version(),page:await page.evaluate(()=>({width:innerWidth,height:innerHeight,devicePixelRatio,visualScale:visualViewport?.scale,userAgent:navigator.userAgent})),viewport:page.viewportSize()};
   events.push({name:'运行环境',ok:true,environment});
@@ -444,6 +445,7 @@ async function executeDraft(config, validation, options) {
         await page.goto('https://fxg.jinritemai.com/ffa/g/create?entrance=create', { waitUntil: 'domcontentloaded' });
       }
       const entry=await resolveEntry(page);
+      if(options.requireBlankEntry)await assertBlankProductEntry(page);
       events.at(-1).entry=entry;
       const legacyWizard = async () => await page.getByText('主图上传', { exact: true }).isVisible();
       if(await page.getByText('确认信息，继续生成',{exact:true}).isVisible().catch(()=>false)) {

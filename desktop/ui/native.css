@@ -168,3 +168,19 @@
     transition: none;
   }
 }
+
+.shop-mismatch {
+  color: #a86727 !important;
+  max-width: 290px;
+  overflow-wrap: anywhere;
+}
+.native-app .shop-option-end {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.native-app .shop-tip .button {
+  margin-left: auto;
+}
+.native-app .run-action > .button + .button {
+  margin-top: 8px;
+}

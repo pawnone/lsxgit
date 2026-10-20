@@ -203,3 +203,141 @@ test("missing receipt cannot turn confirmed ledger into a new save", async (t) =
   });
   await assert.rejects(s.check(), /上次结果未确认/);
 });
+
+test("explicit recreate keeps old receipts and makes four new isolated attempts", async (t) => {
+  const { s, executions } = await setup(t);
+  await s.check();
+  await s.start(s.preflight.token);
+  await finished(s);
+  const old = s.run.tasks.map((t) => ({
+    file: t.receiptFile,
+    dir: t.outputDir,
+    id: t.attemptId,
+  }));
+  const bytes = await Promise.all(old.map((t) => fs.readFile(t.file, "utf8")));
+  await s.check({ mode: "recreate" });
+  assert.ok(s.preflight.tasks.every((t) => t.status === "recreate-ready"));
+  const token = s.preflight.token;
+  await s.start(token);
+  await assert.rejects(s.start(token), /当前有任务|确认已失效/);
+  await finished(s);
+  assert.equal(executions.length, 8);
+  assert.equal(s.run.status, "complete");
+  assert.equal(s.run.mode, "recreate");
+  for (let i = 0; i < 4; i++) {
+    assert.notEqual(s.run.tasks[i].attemptId, old[i].id);
+    assert.notEqual(s.run.tasks[i].outputDir, old[i].dir);
+    assert.equal(await fs.readFile(old[i].file, "utf8"), bytes[i]);
+  }
+  assert.equal(new Set(executions.map((e) => e.outputDir)).size, 8);
+  assert.ok(executions.every((e) => e.workspaceToken && e.attemptId));
+  for (let i = 0; i < 8; i += 2)
+    assert.equal(
+      executions[i].workspaceToken,
+      executions[i + 1].workspaceToken,
+    );
+  assert.notEqual(executions[0].workspaceToken, executions[2].workspaceToken);
+});
+
+test("legacy receipts skip normally, recreate append-only; unknown cannot recreate", async (t) => {
+  const { s } = await setup(t);
+  await s.check();
+  const first = s.preflight.tasks[0],
+    legacy = path.dirname(path.dirname(first.outputDir));
+  const file = path.join(legacy, `draft-save-${first.inputHash}.json`);
+  await writeJson(file, {
+    status: "confirmed",
+    inputHash: first.inputHash,
+    evidence: ["旧保存成功"],
+  });
+  await s.check();
+  assert.equal(s.preflight.tasks[0].status, "already-saved");
+  assert.equal(s.preflight.tasks[0].receiptFile, file);
+  await s.check({ mode: "recreate" });
+  assert.equal(s.preflight.tasks[0].status, "recreate-ready");
+  await writeJson(path.join(s.preflight.tasks[0].outputDir, "intent.json"), {
+    status: "needs-review",
+  });
+  await assert.rejects(s.check({ mode: "recreate" }), /上次结果未确认/);
+  assert.equal((await readJson(file)).status, "confirmed");
+});
+
+test("startup probes registered stores without opening windows and preserves workspace identity", async (t) => {
+  const { s, root, browser, runner } = await setup(t);
+  const original = s.config.shops.map((s) => s.workspaceToken);
+  let opens = 0;
+  browser.open = async () => {
+    opens++;
+  };
+  browser.observe = async (shop) => ({
+    status: shop.name === "测试店A" ? "verified" : "mismatch",
+    loggedIn: true,
+    actualName: "测试店A",
+  });
+  const next = new ListingService({ root, browser, runner });
+  await next.init();
+  await next.refreshShops();
+  await next.scan();
+  assert.equal(opens, 0);
+  assert.deepEqual(
+    next.config.shops.map((s) => s.workspaceToken),
+    original,
+  );
+  assert.equal(next.config.shops[0].verified, true);
+  assert.equal(next.config.shops[1].verified, false);
+  assert.equal(next.config.shops[1].loggedIn, true);
+  assert.equal(next.config.shops[1].actualName, "测试店A");
+  assert.equal(next.config.shops[1].loginStatus, "mismatch");
+  await assert.rejects(next.check(), /人工登录和店铺核对/);
+});
+
+test("explicit fresh login isolates one store, keeps old profile and cannot bypass safety", async (t) => {
+  const { s, browser } = await setup(t);
+  const [a, b] = s.config.shops;
+  const untouched = structuredClone(b);
+  let profiles = [];
+  browser.open = async (shop) => profiles.push(shop.loginProfileId || shop.id);
+  browser.observe = async (shop) => ({
+    status: shop.loginProfileId ? "login-required" : "mismatch",
+    loggedIn: !shop.loginProfileId,
+    actualName: shop.loginProfileId ? null : b.name,
+  });
+  await s.openLogin(a.id);
+  assert.equal(a.loginProfileId, undefined);
+  assert.equal(a.loginStatus, "mismatch");
+  await s.openLogin(a.id, { fresh: true });
+  assert.notEqual(a.loginProfileId, a.id);
+  assert.equal(a.loginProfiles[0].id, a.id);
+  assert.deepEqual(b, untouched);
+  assert.equal(profiles.length, 2);
+  assert.notEqual(profiles[0], profiles[1]);
+  a.securityBlocked = true;
+  const profile = a.loginProfileId;
+  await assert.rejects(s.openLogin(a.id, { fresh: true }), /SAFETY_BLOCKED/);
+  assert.equal(a.loginProfileId, profile);
+  browser.observe = async () => ({
+    status: "verified",
+    loggedIn: true,
+    actualName: a.name,
+  });
+  await s.refreshShops();
+  assert.equal(a.verified, false);
+  assert.equal(a.securityBlocked, true);
+});
+
+test("failed strict shop verification cannot be relabelled verified by observation", async (t) => {
+  const { s, browser } = await setup(t);
+  const a = s.config.shops[0];
+  browser.verify = async () => {
+    throw Error("严格核对失败");
+  };
+  browser.observe = async () => ({
+    status: "verified",
+    loggedIn: true,
+    actualName: a.name,
+  });
+  await assert.rejects(s.verify(a.id), /严格核对失败/);
+  assert.equal(a.verified, false);
+  assert.equal(a.loggedIn, true);
+  assert.match(a.loginError, /严格核对失败/);
+});

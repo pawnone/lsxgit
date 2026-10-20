@@ -23,6 +23,9 @@
     "run-draft: 可导入验证/执行函数、结构化进度、输出目录参数",
     "safety-guard: 轮询检测可见安全限制并立即断开自动化",
     "shop-guard: 店名等待失败时优先回报已锁定的安全拦截原因",
-    "prepare-product: 清理继承的行尾空白，逻辑不变"
+    "prepare-product: 清理继承的行尾空白，逻辑不变",
+    "run-draft: 接受APP登记的browser/page，新建页空白校验后填写",
+    "shop-observation: 只读检测实际店名，区分未登录和身份不符",
+    "workspace: 每店固定工作页跨执行器复用，未知结果阻断清空"
   ]
 }

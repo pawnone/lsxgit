@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store, readJson, writeJson } from "./storage.mjs";
+import { taskRecords } from "./task-records.mjs";
 const uuid = () => crypto.randomUUID(),
   hash = (s) =>
     crypto.createHash("sha256").update(s).digest("hex").slice(0, 24);
@@ -13,7 +14,7 @@ const failureType = (e) =>
       ? "needs-review"
       : "failed";
 export class ListingService extends EventEmitter {
-  constructor({ root, runner, browser, version = "0.3.1-alpha" } = {}) {
+  constructor({ root, runner, browser, version = "0.3.2-alpha" } = {}) {
     super();
     Object.assign(this, { root, runner, browser, version });
     this.store = new Store(root);
@@ -42,6 +43,8 @@ export class ListingService extends EventEmitter {
       s.loggedIn = false;
       s.verified = false;
       s.actualName = null;
+      s.loginStatus = s.securityBlocked ? "safety-blocked" : "checking";
+      s.workspaceToken ??= uuid();
     }
     const dirs = await fs.readdir(path.join(this.root, "runs")).catch((e) => {
       if (e.code === "ENOENT") return [];
@@ -105,6 +108,7 @@ export class ListingService extends EventEmitter {
       preflight: this.preflight
         ? {
             token: this.preflight.token,
+            mode: this.preflight.mode,
             createdAt: this.preflight.createdAt,
             tasks: this.preflight.tasks.map(({ config, ...t }) => t),
           }
@@ -142,6 +146,8 @@ export class ListingService extends EventEmitter {
       verified: false,
       actualName: null,
       securityBlocked: false,
+      loginStatus: "browser-closed",
+      workspaceToken: uuid(),
     };
     this.config.shops.push(s);
     if (platform === "dou" && !this.config.selectedShopIds.length)
@@ -214,20 +220,81 @@ export class ListingService extends EventEmitter {
       this.notify();
     }
   }
-  async openLogin(id) {
+  applyObservation(shop, state) {
+    shop.loggedIn = state.loggedIn === true;
+    shop.actualName = state.actualName || null;
+    shop.checkedAt = state.checkedAt || new Date().toISOString();
+    shop.loginError = state.error || null;
+    shop.verified = state.status === "verified" && !shop.securityBlocked;
+    shop.loginStatus = shop.securityBlocked ? "safety-blocked" : state.status;
+  }
+  async observeOne(shop) {
+    try {
+      const state = await this.browser.observe(shop);
+      this.applyObservation(shop, state);
+      return state;
+    } catch (e) {
+      if (failureType(e) === "safety-blocked") shop.securityBlocked = true;
+      this.applyObservation(shop, {
+        status: shop.securityBlocked ? "safety-blocked" : "connection-error",
+        loggedIn: false,
+        error: e.message,
+      });
+      return null;
+    }
+  }
+  async refreshShops() {
     this.ensureIdle();
-    const s = this.findShop(id);
+    this.busyOp = true;
+    this.preflight = null;
+    this.notify();
+    try {
+      for (const shop of this.config.shops.filter(
+        (s) => s.platform === "dou",
+      )) {
+        await this.observeOne(shop);
+        await this.saveConfig();
+        this.notify();
+      }
+      return this.snapshot();
+    } finally {
+      this.busyOp = false;
+      this.notify();
+    }
+  }
+  async openLogin(id, { fresh = false } = {}) {
+    this.ensureIdle();
+    const shop = this.findShop(id);
     this.preflight = null;
     this.busyOp = true;
+    this.notify();
     try {
-      await this.browser.open(s);
-      s.loggedIn = false;
-      s.verified = false;
-      s.actualName = null;
+      if (shop.securityBlocked)
+        throw Error(
+          "SAFETY_BLOCKED：请先人工处理安全验证，不能用新登录环境绕过",
+        );
+      // Existing profile is checked before an explicitly requested independent sign-in.
+      if (fresh) {
+        await this.observeOne(shop);
+        if (shop.securityBlocked)
+          throw Error("SAFETY_BLOCKED：检测到安全验证，已停止");
+        shop.loginProfiles ??= [];
+        shop.loginProfiles.push({
+          id: shop.loginProfileId || shop.id,
+          retiredAt: new Date().toISOString(),
+        });
+        shop.loginProfileId = uuid();
+        await this.saveConfig();
+      }
+      await this.browser.open(shop);
+      await this.observeOne(shop);
       await this.saveConfig();
       return {
-        message:
-          "浏览器已打开。请人工登录，再点击核对店铺；登录窗口不会自动关闭。",
+        message: shop.verified
+          ? "已复用该店窗口，店铺核对通过"
+          : shop.loginStatus === "mismatch"
+            ? `此专用窗口当前是「${shop.actualName}」，目标是「${shop.name}」。可使用“重新登录”建立独立登录；不会自动切店。`
+            : "专用窗口已打开，请人工完成登录，再核对店铺；窗口不会自动关闭。",
       };
     } finally {
       this.busyOp = false;
@@ -250,6 +317,8 @@ export class ListingService extends EventEmitter {
       s.actualName = s.name;
       s.checkedAt = new Date().toISOString();
       s.securityBlocked = false;
+      s.loginStatus = "verified";
+      s.loginError = null;
       await this.saveConfig();
       return r.evidence;
     } catch (e) {
@@ -257,6 +326,11 @@ export class ListingService extends EventEmitter {
       s.loggedIn = false;
       s.actualName = null;
       if (failureType(e) === "safety-blocked") s.securityBlocked = true;
+      if (this.browser.observe) await this.observeOne(s);
+      else
+        s.loginStatus = s.securityBlocked ? "safety-blocked" : "login-required";
+      s.verified = false;
+      s.loginError = e.message;
       await this.saveConfig();
       throw e;
     } finally {
@@ -264,7 +338,8 @@ export class ListingService extends EventEmitter {
       this.notify();
     }
   }
-  async check() {
+  async check({ mode = "normal" } = {}) {
+    if (!["normal", "recreate"].includes(mode)) throw Error("任务模式无效");
     this.ensureIdle();
     if (
       !this.config.selectedShopIds.length ||
@@ -298,27 +373,30 @@ export class ListingService extends EventEmitter {
           config.draftOnly = true;
           const v = await this.runner.call("validate", { config });
           if (!v.ok) throw Error(v.errors.map((e) => e.message).join("\n"));
-          const key = hash(s.id + "|" + p.id + "|" + v.inputHash),
-            dir = path.join(this.root, "tasks", key),
-            receipt = await readJson(
-              path.join(dir, `draft-save-${v.inputHash}.json`),
-            ),
-            ledger = await readJson(path.join(dir, "intent.json"));
-          if (
-            (receipt &&
-              (receipt.status !== "confirmed" ||
-                receipt.inputHash !== v.inputHash ||
-                !Array.isArray(receipt.evidence) ||
-                !receipt.evidence.length)) ||
-            (ledger &&
-              (["running", "needs-review"].includes(ledger.status) ||
-                (ledger.status === "confirmed" && !receipt)))
-          )
+          for (const r of this.history)
+            for (const t of r.tasks || [])
+              if (
+                t.shopId === s.id &&
+                t.productId === p.id &&
+                ["running", "needs-review"].includes(t.status)
+              )
+                throw Error(
+                  `${s.name} / ${p.config.product.itemCode}：上次结果未确认，请核实草稿，不自动重试`,
+                );
+          const baseKey = hash(s.id + "|" + p.id + "|" + v.inputHash),
+            baseDir = path.join(this.root, "tasks", baseKey);
+          const records = await taskRecords(baseDir, v.inputHash);
+          if (records.some((r) => r.uncertain))
             throw Error(
               `${s.name} / ${p.config.product.itemCode}：上次结果未确认，请核实草稿，不自动重试`,
             );
+          const previous = records.find((r) => r.confirmed),
+            skip = mode === "normal" && !!previous,
+            attemptId = skip ? null : uuid();
           tasks.push({
-            id: key,
+            id: skip ? baseKey : baseKey + "." + attemptId,
+            baseKey,
+            attemptId,
             shopId: s.id,
             shopName: s.name,
             productId: p.id,
@@ -326,17 +404,23 @@ export class ListingService extends EventEmitter {
             code: p.config.product.itemCode,
             sku: config.skuMatrix.length,
             inputHash: v.inputHash,
-            outputDir: dir,
+            outputDir: skip
+              ? previous.dir
+              : path.join(baseDir, "attempts", attemptId),
             config,
-            status: receipt?.status === "confirmed" ? "already-saved" : "ready",
-            receiptFile: receipt
-              ? path.join(dir, `draft-save-${v.inputHash}.json`)
-              : null,
+            status: skip
+              ? "already-saved"
+              : mode === "recreate" && previous
+                ? "recreate-ready"
+                : "ready",
+            previousSavedAt: previous?.savedAt || null,
+            receiptFile: skip ? previous.receiptFile : null,
           });
         }
       }
       this.preflight = {
         token: uuid(),
+        mode,
         createdAt: new Date().toISOString(),
         selection: JSON.stringify([
           this.config.selectedShopIds,
@@ -372,7 +456,9 @@ export class ListingService extends EventEmitter {
     )
       throw Error("任务确认已失效，请重新检查本批资料");
     if (this.preflight.tasks.every((t) => t.status === "already-saved"))
-      throw Error("本批全部已有确认草稿，未重复创建；请查看原回执");
+      throw Error(
+        "本批全部已有确认草稿；可点击“重新创建草稿”并确认新的一批，原回执会保留",
+      );
     this.busyOp = true;
     try {
       await this.store.lock();
@@ -392,6 +478,7 @@ export class ListingService extends EventEmitter {
       version: this.version,
       status: "running",
       draftOnly: true,
+      mode: plan.mode,
       startedAt: new Date().toISOString(),
       tasks: plan.tasks.map((t) => ({
         ...t,
@@ -402,6 +489,20 @@ export class ListingService extends EventEmitter {
       logs: [],
     };
     try {
+      for (const t of this.run.tasks)
+        if (t.status !== "already-saved") {
+          await fs.mkdir(path.dirname(t.outputDir), { recursive: true });
+          await fs.mkdir(t.outputDir);
+          await writeJson(path.join(t.outputDir, "intent.json"), {
+            status: "reserved",
+            runId: this.run.id,
+            shopId: t.shopId,
+            productId: t.productId,
+            inputHash: t.inputHash,
+            attemptId: t.attemptId,
+            mode: this.run.mode,
+          });
+        }
       await this.persistRun();
     } catch (e) {
       this.running = false;
@@ -450,6 +551,8 @@ export class ListingService extends EventEmitter {
           shopId: s.id,
           productId: t.productId,
           inputHash: t.inputHash,
+          attemptId: t.attemptId,
+          mode: r.mode,
         });
         await this.persistRun();
         this.notify();
@@ -462,9 +565,21 @@ export class ListingService extends EventEmitter {
               endpoint: verified.endpoint,
               expectedShop: t.shopName,
               outputDir: t.outputDir,
+              workspaceToken: s.workspaceToken,
+              attemptId: t.attemptId,
             },
             {
               onEvent: (e) => {
+                if (e.type === "workspace") {
+                  t.workspace = { created: e.created, reused: e.reused };
+                  r.logs.push({
+                    at: new Date().toISOString(),
+                    task: t.id,
+                    text: e.reused
+                      ? "复用本店固定工作页"
+                      : "创建本店固定工作页",
+                  });
+                }
                 if (e.type === "step-start") r.step = e.name;
                 if (e.type === "log") {
                   r.logs.push({
@@ -497,6 +612,9 @@ export class ListingService extends EventEmitter {
           t.evidence = result.saved.evidence;
           await writeJson(path.join(t.outputDir, "intent.json"), {
             status: "confirmed",
+            shopId: t.shopId,
+            productId: t.productId,
+            attemptId: t.attemptId,
             runId: r.id,
             inputHash: t.inputHash,
           });
@@ -525,6 +643,9 @@ export class ListingService extends EventEmitter {
           t.error = e.message;
           await writeJson(path.join(t.outputDir, "intent.json"), {
             status: t.status,
+            shopId: t.shopId,
+            productId: t.productId,
+            attemptId: t.attemptId,
             runId: r.id,
             inputHash: t.inputHash,
             error: e.message,

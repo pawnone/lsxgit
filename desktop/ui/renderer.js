@@ -35,7 +35,8 @@ const statuses = {
   ready: "待执行",
   running: "正在执行",
   confirmed: "已保存草稿",
-  "already-saved": "已有草稿（跳过）",
+  "already-saved": "本机曾保存（跳过）",
+  "recreate-ready": "本次重新创建",
   "needs-review": "结果待核实",
   failed: "失败",
   "safety-blocked": "安全停止",
@@ -81,7 +82,7 @@ function heading(title, sub, action = "help", label = "使用说明") {
 function shopList(selectable = true, p = platform) {
   const items = S.config.shops.filter((s) => s.platform === p);
   return items.length
-    ? `<div class="shop-list">${items.map((s) => `<div class="shop-option ${S.config.selectedShopIds.includes(s.id) ? "selected" : ""}" data-shop-row="${s.id}"><div class="shop-option-main">${selectable && p === "dou" ? `<input type="checkbox" aria-label="选择店铺：${esc(s.name)}" data-shop="${s.id}" ${S.config.selectedShopIds.includes(s.id) ? "checked" : ""} ${running() ? "disabled" : ""}>` : `<div class="shop-avatar small-avatar">${esc(s.name[0])}</div>`}<div class="shop-label"><strong>${esc(s.name)}</strong><small>${p === "dou" ? "抖店" : "拼多多"} · 专用本机登录资料</small></div></div><div class="shop-option-end"><span class="shop-status-pair">${badge(s.loggedIn ? "已登录" : "待登录", s.loggedIn ? "green" : "gray")}${badge(s.securityBlocked ? "安全停止" : s.verified ? "已核对" : "未核对", s.securityBlocked ? "amber" : s.verified ? "blue" : "gray")}</span>${p === "dou" ? `${btn("登录", "login", "shop-mini", `data-id="${s.id}" ${running() ? "disabled" : ""}`)}${btn(s.securityBlocked ? "已处理，重新核对" : "核对", "verify", "shop-mini", `data-id="${s.id}" ${running() ? "disabled" : ""}`)}` : badge("入口保留", "amber")}</div></div>`).join("")}</div>`
+    ? `<div class="shop-list">${items.map((s) => `<div class="shop-option ${S.config.selectedShopIds.includes(s.id) ? "selected" : ""}" data-shop-row="${s.id}"><div class="shop-option-main">${selectable && p === "dou" ? `<input type="checkbox" aria-label="选择店铺：${esc(s.name)}" data-shop="${s.id}" ${S.config.selectedShopIds.includes(s.id) ? "checked" : ""} ${running() ? "disabled" : ""}>` : `<div class="shop-avatar small-avatar">${esc(s.name[0])}</div>`}<div class="shop-label"><strong>${esc(s.name)}</strong><small>${p === "dou" ? "抖店" : "拼多多"} · 专用本机登录资料</small>${s.actualName && s.actualName !== s.name ? `<small class="shop-mismatch">当前窗口：${esc(s.actualName)}</small>` : ""}${s.loginError ? `<small class="shop-mismatch">${esc(s.loginError)}</small>` : ""}</div></div><div class="shop-option-end"><span class="shop-status-pair">${badge(s.loginStatus === "checking" ? "检测中" : s.loggedIn ? "已登录" : s.loginStatus === "browser-closed" ? "未打开" : "需登录", s.loggedIn ? "green" : "gray")}${badge(s.securityBlocked ? "安全停止" : s.loginStatus === "mismatch" ? "店铺不符" : s.verified ? "已核对" : "未核对", s.securityBlocked ? "amber" : s.verified ? "blue" : "gray")}</span>${p === "dou" ? `${btn(s.loggedIn ? "打开" : "登录", "login", "shop-mini", `data-id="${s.id}" ${running() ? "disabled" : ""}`)}${btn(s.securityBlocked ? "已处理，重新核对" : "核对", "verify", "shop-mini", `data-id="${s.id}" ${running() ? "disabled" : ""}`)}${["mismatch", "login-required", "connection-error"].includes(s.loginStatus) && !s.securityBlocked ? btn("重新登录", "new-login", "shop-mini", `data-id="${s.id}" ${running() ? "disabled" : ""}`) : ""}` : badge("入口保留", "amber")}</div></div>`).join("")}</div>`
     : `<div class="empty-note">${ico("store")}还没有${p === "dou" ? "抖店" : "拼多多"}店铺<br><p style="margin:12px 0">先添加完整店铺名称，再打开浏览器登录</p>${btn("添加店铺", "add-shop", "primary", "", "plus")}</div>`;
 }
 function productTable() {
@@ -112,7 +113,7 @@ function workbench() {
   return `${heading("批量上架", "读取本机素材，逐店核对，逐商品保存草稿")}${
     platform === "pdd"
       ? `<div class="info-banner amber"><div><strong>拼多多入口保留，执行尚未开放</strong><p>此版本只接入抖店，不复用抖店字段或猜填拼多多价格。</p></div></div><section class="panel"><div class="panel-head"><div class="panel-title">拼多多店铺</div><div class="platform-switch"><button data-platform="dou">抖店</button><button class="active" data-platform="pdd">拼多多</button></div></div>${shopList(false, "pdd")}</section>`
-      : `<div class="info-banner"><div><strong>抖店执行器 · 当前支持时尚套装</strong><p>适配范围：服装 > 女装 > 时尚套装、5张主图、现货预售混合。编码以你填写的 Excel 为准。</p></div></div><div class="columns"><div><section class="panel"><div class="panel-head"><div><div class="panel-title">01　选择平台与店铺 ${badge("可多选", "blue")}</div><p>每家店都要登录并单独核对；不默认全选</p></div><div class="platform-switch"><button class="active" data-platform="dou">抖店</button><button data-platform="pdd" ${running() ? "disabled" : ""}>拼多多</button></div></div>${shopList()}<div class="shop-tip">${ico("shield-check")}登录窗口一直保留；登录完成后点击核对</div></section><section class="panel"><div class="panel-head"><div><div class="panel-title">02　本批商品</div><p>选择准备好的商品，开始前会展示完整任务清单</p></div>${btn("重新扫描", "scan", "", "", "refresh-cw")}</div><div class="pathbar">${ico("folder-open")}<span class="path-text">${esc(S.config.materialsRoot || "尚未选择总素材库")}</span><button data-act="root" ${running() ? "disabled" : ""}>选择文件夹</button></div>${productTable()}${S.scanErrors.map((e) => `<div class="scan-error"><strong>${esc(e.folder)}</strong>${esc(e.error)}</div>`).join("")}</section>${runPanel()}</div><aside><section class="panel readiness"><div class="ready-head"><h2>运行前检查</h2><p>检查通过后，再确认全部目标</p></div><div class="check-list">${[
+      : `<div class="info-banner"><div><strong>抖店执行器 · 当前支持时尚套装</strong><p>适配范围：服装 > 女装 > 时尚套装、5张主图、现货预售混合。编码以你填写的 Excel 为准。</p></div></div><div class="columns"><div><section class="panel"><div class="panel-head"><div><div class="panel-title">01　选择平台与店铺 ${badge("可多选", "blue")}</div><p>每家店都要登录并单独核对；不默认全选</p></div><div class="platform-switch"><button class="active" data-platform="dou">抖店</button><button data-platform="pdd" ${running() ? "disabled" : ""}>拼多多</button></div></div>${shopList()}<div class="shop-tip">${ico("shield-check")}独立窗口保持登录；APP重开会自动检测${btn("刷新状态", "refresh-shops", "text", running() ? "disabled" : "")}</div></section><section class="panel"><div class="panel-head"><div><div class="panel-title">02　本批商品</div><p>选择准备好的商品，开始前会展示完整任务清单</p></div>${btn("重新扫描", "scan", "", "", "refresh-cw")}</div><div class="pathbar">${ico("folder-open")}<span class="path-text">${esc(S.config.materialsRoot || "尚未选择总素材库")}</span><button data-act="root" ${running() ? "disabled" : ""}>选择文件夹</button></div>${productTable()}${S.scanErrors.map((e) => `<div class="scan-error"><strong>${esc(e.folder)}</strong>${esc(e.error)}</div>`).join("")}</section>${runPanel()}</div><aside><section class="panel readiness"><div class="ready-head"><h2>运行前检查</h2><p>检查通过后，再确认全部目标</p></div><div class="check-list">${[
           [
             "店铺已核对",
             targets.length
@@ -138,7 +139,7 @@ function workbench() {
           )
           .join(
             "",
-          )}</div><div class="run-summary"><div class="task-equation"><span>${selectedProducts().length} 件商品 × ${targets.length} 家店铺</span><strong>${countTasks()} <small>个草稿任务</small></strong></div><div class="summary-row"><span>顺序</span><strong>逐店、逐商品串行</strong></div><div class="summary-row"><span>异常</span><strong>立即停批，保留现场</strong></div></div><div class="save-mode">${ico("lock-keyhole")}<div><strong>仅保存草稿</strong><small>不提供正式发布操作</small></div></div><div class="run-action">${btn(hasPlan ? "核对任务并开始" : "检查本批素材", hasPlan ? "review" : "check", "primary full", running() ? "disabled" : "", "list-checks")}<p>已有确认草稿将跳过，不重复创建</p></div></section><div class="note-card">${ico("shield-check")}<div><strong>验证码立即停止</strong><p>APP不会绕过安全验证。出现“结果待核实”时，先检查草稿箱，不自动重试。</p></div></div></aside></div>`
+          )}</div><div class="run-summary"><div class="task-equation"><span>${selectedProducts().length} 件商品 × ${targets.length} 家店铺</span><strong>${countTasks()} <small>个草稿任务</small></strong></div><div class="summary-row"><span>顺序</span><strong>逐店、逐商品串行</strong></div><div class="summary-row"><span>异常</span><strong>立即停批，保留现场</strong></div></div><div class="save-mode">${ico("lock-keyhole")}<div><strong>仅保存草稿</strong><small>不提供正式发布操作</small></div></div><div class="run-action">${btn(hasPlan ? "核对任务并开始" : "检查本批素材", hasPlan ? "review" : "check", "primary full", running() ? "disabled" : "", "list-checks")}<p>本机曾保存的商品默认跳过</p>${btn("重新创建草稿", "recreate", "full", running() ? "disabled" : "")}</div></section><div class="note-card">${ico("shield-check")}<div><strong>验证码立即停止</strong><p>APP不会绕过安全验证。出现“结果待核实”时，先检查草稿箱，不自动重试。</p></div></div></aside></div>`
   }`;
 }
 function shopsPage() {
@@ -208,11 +209,14 @@ function showReview() {
   const p = S.preflight;
   if (!p) return toast("请先检查本批素材");
   dialogTask = p.token;
+  const create = p.tasks.filter((t) => t.status !== "already-saved").length,
+    skip = p.tasks.length - create;
   overlay(
-    `${head("确认本批草稿任务", "以下为真实任务：请逐项核对店铺与商品")}<div class="review-metrics"><div><small>商品</small><strong>${selectedProducts().length}</strong></div><span>×</span><div><small>店铺</small><strong>${selectedShops().length}</strong></div><span>＝</span><div><small>草稿任务</small><strong>${p.tasks.length}</strong></div></div>${tasksTable(p.tasks)}<div class="notice blue">逐店串行执行。只保存草稿。已有确认草稿将跳过；结果未知会阻断，不自动重试。素材库另有 ${S.scanErrors.length} 个错误目录，未加入本批。</div><div class="buttons">${btn("返回修改", "close")}${btn("确认，开始保存草稿", "start", "primary", "", "play")}</div>`,
+    `${head(p.mode === "recreate" ? "确认重新创建草稿" : "确认本批草稿任务", "逐项核对店铺与商品；仅保存草稿")}<div class="review-metrics"><div><small>商品</small><strong>${selectedProducts().length}</strong></div><span>×</span><div><small>店铺</small><strong>${selectedShops().length}</strong></div><span>＝</span><div><small>任务</small><strong>${p.tasks.length}</strong></div></div><div class="notice blue">本次将新建 ${create} 个，跳过 ${skip} 个。${p.mode === "recreate" ? "这是新的一批，原有草稿与历史回执会保留；后台旧草稿仍在时会同时存在。" : "“本机曾保存”来自本地历史，并未查询后台草稿是否仍存在。"}</div>${tasksTable(p.tasks)}<div class="notice blue">逐店串行，每店复用固定工作页。保存未知会阻断；验证码立即停止。素材库另有 ${S.scanErrors.length} 个错误目录未加入本批。</div><div class="buttons">${btn("返回修改", "close")}${!create ? btn("重新创建草稿", "recreate", "primary") : btn(p.mode === "recreate" ? "确认，重新创建草稿" : "确认，开始保存草稿", "start", "primary", "", "play")}</div>`,
     "drawer",
   );
 }
+
 async function click(b) {
   const a = b.dataset.act,
     id = b.dataset.id;
@@ -238,6 +242,30 @@ async function click(b) {
         document.querySelector("#shop-platform").value,
       );
       close();
+      break;
+    case "refresh-shops":
+      await call("refreshShops");
+      toast("已检查本软件登记的店铺窗口");
+      break;
+    case "new-login":
+      overlay(
+        `${head("重新登录此店", "其他店铺会话保持独立")}<p>将为「${esc(S.config.shops.find((s) => s.id === id).name)}」建立新的独立登录环境。原窗口和资料保留，不会切换其他店铺；请在新窗口人工登录目标店铺后核对。</p><div class="buttons">${btn("取消", "close")}${btn("打开独立登录窗口", "confirm-new-login", "primary", `data-id="${id}"`)}</div>`,
+      );
+      break;
+    case "confirm-new-login": {
+      const r = await call("newLogin", id);
+      close();
+      toast(r?.message);
+      break;
+    }
+    case "recreate":
+      overlay(
+        `${head("重新创建所选商品的草稿", "此操作会新增草稿，历史记录保留")}<p>当前选择 ${selectedProducts().length} 件商品、${selectedShops().length} 家店铺。重新检查通过后，将再展示完整任务清单；保存结果未知的任务仍会被阻断。</p><div class="buttons">${btn("取消", "close")}${btn("检查新的一批", "recreate-check", "primary")}</div>`,
+      );
+      break;
+    case "recreate-check":
+      await call("check", "recreate");
+      showReview();
       break;
     case "login": {
       const r = await call("openLogin", id);
@@ -314,7 +342,7 @@ async function click(b) {
     }
     case "help":
       overlay(
-        `${head("文青尚品使用流程")}<div class="issue-row"><strong>1. 添加店铺并人工登录</strong><p>APP打开每店专用Chrome，窗口不会自动关闭。</p></div><div class="issue-row"><strong>2. 点击核对，勾选目标店铺</strong><p>每家店都要核对；不能用端口或页面顺序代替店铺身份。</p></div><div class="issue-row"><strong>3. 选择总素材库及商品</strong><p>读取现有Excel和素材。缺项会指出商品目录、字段和修正提示。</p></div><div class="issue-row"><strong>4. 检查并确认任务，保存草稿</strong><p>全部目标列清楚再执行。验证码即停；已有草稿跳过，未知保存先核实。</p></div><div class="buttons">${btn("知道了", "close", "primary")}</div>`,
+        `${head("文青尚品使用流程")}<div class="issue-row"><strong>1. 添加店铺并人工登录</strong><p>每店有独立Chrome登录环境，APP关闭后窗口仍保留。首次登录若进入同账号下另一店，须在该独立窗口选择目标店铺；APP会显示实际店名并阻断不匹配目标。</p></div><div class="issue-row"><strong>2. 点击核对，勾选目标店铺</strong><p>APP重开自动检查已登记窗口，也可点击刷新状态；店名精确一致才显示已核对。打开窗口或登录同一个账号不等于选对店铺。</p></div><div class="issue-row"><strong>3. 选择总素材库及商品</strong><p>读取现有Excel和素材。缺项会指出商品目录、字段和修正提示。</p></div><div class="issue-row"><strong>4. 检查并确认任务，保存草稿</strong><p>全部目标列清楚再执行，每店复用固定工作页。默认按本机保存历史跳过；需要再测请点“重新创建草稿”。后台删除草稿不会自动删除本机记录；未知保存仍须先核实。</p></div><div class="buttons">${btn("知道了", "close", "primary")}</div>`,
       );
       break;
   }

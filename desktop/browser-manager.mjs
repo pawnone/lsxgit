@@ -8,7 +8,7 @@ export class BrowserManager {
     Object.assign(this, { root, runner, executable });
   }
   profile(shop) {
-    return path.join(this.root, shop.id);
+    return path.join(this.root, shop.loginProfileId || shop.id);
   }
   async endpoint(shop) {
     return managedEndpoint(this.profile(shop));
@@ -33,7 +33,14 @@ export class BrowserManager {
   }
   async open(shop) {
     const existing = await this.endpoint(shop);
-    if (existing) return { ready: true, reused: true };
+    if (existing) {
+      await this.runner.call(
+        "focus",
+        { endpoint: existing, expectedShop: shop.name },
+        { timeout: 20000 },
+      );
+      return { ready: true, reused: true };
+    }
     const executable = await this.detectExecutable(),
       profile = this.profile(shop);
     await fs.mkdir(profile, { recursive: true, mode: 0o700 });
@@ -60,6 +67,17 @@ export class BrowserManager {
     throw Error(
       "专用浏览器尚未就绪。已保留窗口，请检查Chrome提示；不要清理登录目录或连续重启。",
     );
+  }
+  async observe(shop) {
+    const endpoint = await this.endpoint(shop);
+    if (!endpoint)
+      return { status: "browser-closed", loggedIn: false, actualName: null };
+    const state = await this.runner.call(
+      "observe",
+      { endpoint, expectedShop: shop.name },
+      { timeout: 30000 },
+    );
+    return { ...state, endpoint };
   }
   async verify(shop) {
     const endpoint = await this.endpoint(shop);

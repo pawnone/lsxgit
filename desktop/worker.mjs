@@ -2,9 +2,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import util from "node:util";
+import { chromium } from "playwright-core";
+import {
+  prepareWorkspace,
+  markWorkspace,
+} from "../engine/doudian/workspace.mjs";
 import { prepareProduct } from "../engine/doudian/prepare-product.mjs";
 import { scanProducts } from "../engine/doudian/scan-products.mjs";
 import { validateConfig, executeDraft } from "../engine/doudian/run-draft.mjs";
+import { observeShop, focusShop } from "../engine/doudian/shop-observation.mjs";
 import { inspectShop } from "../engine/doudian/shop-guard.mjs";
 process.on("disconnect", () => process.exit(1));
 process.stdout.on("error", () => process.exit(1));
@@ -134,19 +140,68 @@ async function execute(req) {
     mode: "execute",
     validation: v,
   };
+  let browser, workspace;
   try {
-    const result = await executeDraft(config, v, {
-      restartEntry: true,
-      outputDir,
-      onEvent: async (e) => emit(e),
+    browser = await chromium.connectOverCDP(endpoint, { timeout: 30000 });
+    workspace = await prepareWorkspace(browser, {
+      token: req.workspaceToken,
+      expectedShop,
+      attemptId: req.attemptId,
     });
-    Object.assign(report, result, { finishedAt: new Date().toISOString() });
+    emit({
+      type: "workspace",
+      created: workspace.created,
+      reused: !workspace.created,
+    });
+    const result = await executeDraft(config, v, {
+      browser,
+      page: workspace.page,
+      requireBlankEntry: true,
+      restartEntry: false,
+      outputDir,
+      onEvent: async (e) => {
+        if (e.type === "step-start" && e.name === "保存草稿")
+          await markWorkspace(workspace.page, req.workspaceToken, {
+            phase: "saving",
+          });
+        emit(e);
+      },
+    });
+    await markWorkspace(workspace.page, req.workspaceToken, {
+      phase: "confirmed",
+      finishedAt: new Date().toISOString(),
+    });
+    Object.assign(report, result, {
+      workspace: { created: workspace.created, reused: !workspace.created },
+      finishedAt: new Date().toISOString(),
+    });
     await fs.writeFile(
       path.join(outputDir, "last-run.json"),
       JSON.stringify(report, null, 2),
     );
     return report;
   } catch (e) {
+    if (workspace) {
+      const receipt = await json(
+        path.join(outputDir, `draft-save-${expectedHash}.json`),
+      );
+      const phase =
+        receipt?.status === "confirmed"
+          ? "confirmed"
+          : receipt
+            ? "needs-review"
+            : /SAFETY_BLOCKED/.test(e.message)
+              ? "safety-blocked"
+              : /closed|disconnect|未知/.test(e.message)
+                ? "needs-review"
+                : "failed";
+      try {
+        await markWorkspace(workspace.page, req.workspaceToken, {
+          phase,
+          error: e.message,
+        });
+      } catch {}
+    }
     Object.assign(report, e.execution, {
       ok: false,
       error: e.message,
@@ -157,6 +212,8 @@ async function execute(req) {
       JSON.stringify(report, null, 2),
     );
     throw e;
+  } finally {
+    if (browser) await browser.close();
   }
 }
 let input = "";
@@ -166,6 +223,10 @@ try {
   const { op, payload } = JSON.parse(input);
   let result;
   if (op === "scan") result = await scan(payload);
+  else if (op === "observe")
+    result = await observeShop(payload.endpoint, payload.expectedShop);
+  else if (op === "focus")
+    result = await focusShop(payload.endpoint, payload.expectedShop);
   else if (op === "verify")
     result = await inspectShop(payload.endpoint, payload.expectedShop);
   else if (op === "validate") {

@@ -91,15 +91,64 @@ try {
     "拼多多仅保留入口，不提供执行",
   );
   await win.locator('[data-platform="dou"]').click();
+  // UI-only fixture: never starts a task or writes to a merchant page.
+  const realState = await win.evaluate(() => window.wqapp.getState());
+  await win.evaluate((s) => {
+    const shop = s.config.shops[0];
+    shop.loginStatus = "mismatch";
+    shop.loggedIn = true;
+    shop.verified = false;
+    shop.actualName = "另一个店铺";
+    receive(s);
+  }, structuredClone(realState));
+  assert(
+    await win.getByText("当前窗口：另一个店铺", { exact: true }).isVisible(),
+    "店名不匹配明确显示实际窗口店名",
+  );
+  await win.locator('[data-act="new-login"]').first().click();
+  assert(
+    await win
+      .getByRole("button", { name: "打开独立登录窗口", exact: true })
+      .isVisible(),
+    "重新登录须明确确认独立新窗口，未自动退出其他店",
+  );
+  await win.locator('[data-act="close"]').first().click();
+  await win.waitForTimeout(200);
+  await win.evaluate((s) => {
+    s.preflight = {
+      token: "ui-only",
+      mode: "normal",
+      tasks: [
+        {
+          id: "ui-only",
+          shopName: "界面测试店",
+          code: "UI-TEST",
+          sku: 4,
+          status: "already-saved",
+        },
+      ],
+    };
+    receive(s);
+    showReview();
+  }, structuredClone(realState));
+  assert(
+    await win.getByText(/本次将新建 0 个，跳过 1 个/).isVisible(),
+    "确认页区分本机历史跳过和本次新建数量",
+  );
+  assert(
+    (await win.locator('[data-act="start"]').count()) === 0,
+    "全部跳过时不提供无效开始按钮",
+  );
+  await win.locator('[data-act="close"]').first().click();
+  await win.waitForTimeout(200);
+  await win.evaluate((s) => receive(s), realState);
   if (process.env.WQ_TEST_MATERIALS) {
-    await win.waitForFunction(
-      async () => {
-        const s = await window.wqapp.getState();
-        return !s.busyOp && s.products.length === 2;
-      },
-      {},
-      { timeout: 60000 },
-    );
+    for (let n = 0; ; n++) {
+      const current = await win.evaluate(() => window.wqapp.getState());
+      if (!current.busyOp && current.products.length === 2) break;
+      if (n > 120) throw Error("Material scan timeout");
+      await new Promise((r) => setTimeout(r, 500));
+    }
     const data = await win.evaluate(() => window.wqapp.getState());
     assert(
       data.products.every((p) => p.ok),

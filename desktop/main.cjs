@@ -71,14 +71,17 @@ async function handle(op, p = {}) {
       await service.select(p);
       return publicState();
     case "open-login":
-      return service.openLogin(p.id);
+      return service.openLogin(p.id, { fresh: p.fresh === true });
+    case "refresh-shops":
+      await service.refreshShops();
+      return publicState();
     case "verify":
       await service.verify(p.id, {
         acknowledgeSafety: p.acknowledgeSafety === true,
       });
       return publicState();
     case "check":
-      await service.check();
+      await service.check({ mode: p.mode || "normal" });
       return publicState();
     case "start":
       await service.start(p.token);
@@ -261,15 +264,17 @@ else {
             });
         }
       });
-      if (service.config.materialsRoot)
-        void service.scan().catch((e) => {
-          service.scanErrors = [
-            { folder: service.config.materialsRoot, error: e.message },
-          ];
-          sendState();
-        });
       win.once("ready-to-show", () => win.show());
       await win.loadURL(APP_URL);
+      void (async () => {
+        await service.refreshShops();
+        if (service.config.materialsRoot) await service.scan();
+      })().catch((e) => {
+        service.scanErrors = [
+          { folder: service.config.materialsRoot, error: e.message },
+        ];
+        sendState();
+      });
       Menu.setApplicationMenu(
         Menu.buildFromTemplate([
           {
