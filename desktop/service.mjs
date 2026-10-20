@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { Store, readJson, writeJson } from "./storage.mjs";
+import {planMainImageNames,applyMainImageNames} from "./main-image-names.mjs";
 import { taskRecords } from "./task-records.mjs";
 const uuid = () => crypto.randomUUID(),
   hash = (s) =>
@@ -194,6 +195,24 @@ export class ListingService extends EventEmitter {
     this.scanErrors = [];
     await this.saveConfig();
     return this.scan();
+  }
+  async mainImageNames(id, token) {
+    this.ensureIdle();
+    const product=this.catalog.find(p=>p.id===id);
+    if(!product)throw Error("未找到当前商品，请重新扫描");
+    this.busyOp=true; this.notify();
+    try {
+      if(!token){
+        const plan=await planMainImageNames(this.config.materialsRoot,product.materialRoot);
+        const key=uuid();
+        this.imageRenamePlan={id,key,signature:plan.signature};
+        return {token:key,mapping:plan.mapping.map(({from,to})=>({from,to})),changed:plan.changed};
+      }
+      const plan=this.imageRenamePlan;
+      if(!plan || plan.id!==id || plan.key!==token)throw Error("编号预览已失效，请重新查看");
+      this.imageRenamePlan=null;this.preflight=null;
+      return await applyMainImageNames(this.config.materialsRoot,product.materialRoot,plan.signature);
+    } finally {this.busyOp=false;this.notify();}
   }
   async scan() {
     this.ensureIdle();
@@ -581,6 +600,10 @@ export class ListingService extends EventEmitter {
                   });
                 }
                 if (e.type === "step-start") r.step = e.name;
+                if (e.type === "step-complete") {
+                  t.timings ||= [];
+                  t.timings.push({step:e.name,durationMs:e.durationMs});
+                }
                 if (e.type === "log") {
                   r.logs.push({
                     at: new Date().toISOString(),

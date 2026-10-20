@@ -87,7 +87,7 @@ function shopList(selectable = true, p = platform) {
 }
 function productTable() {
   return S.products.length
-    ? `<div class="table-wrap"><table><thead><tr><th></th><th>商品信息</th><th>规格 / 售价</th><th>资料检查</th><th></th></tr></thead><tbody>${S.products.map((p) => `<tr><td><input type="checkbox" data-product="${p.id}" aria-label="选择商品：${esc(p.code)}" ${S.config.selectedProductIds.includes(p.id) ? "checked" : ""} ${!p.ok || running() ? "disabled" : ""}></td><td><div class="product-cell">${p.image ? `<img class="product-thumb" src="${esc(p.image)}" alt="主图">` : ""}<div><div class="product-name">${esc(p.title)}</div><div class="product-meta">${esc(p.code)}</div><span class="mini-tag">${p.white ? "有白底图" : "无白底图"}</span></div></div></td><td>${p.priceRange.length ? `<div class="price">¥ ${Math.min(...p.priceRange).toFixed(2)}${Math.max(...p.priceRange) !== Math.min(...p.priceRange) ? " – " + Math.max(...p.priceRange).toFixed(2) : ""}</div>` : "—"}<div class="cell-sub">${p.sku} 个规格</div></td><td>${badge(p.ok ? "本地校验通过" : "需要补充", p.ok ? "green" : "amber")}</td><td>${btn("查看", "product", "text", `data-id="${p.id}"`)}</td></tr>`).join("")}</tbody></table></div>`
+    ? `<div class="table-wrap"><table><thead><tr><th></th><th>商品信息</th><th>规格 / 售价</th><th>资料检查</th><th></th></tr></thead><tbody>${S.products.map((p) => `<tr><td><input type="checkbox" data-product="${p.id}" aria-label="选择商品：${esc(p.code)}" ${S.config.selectedProductIds.includes(p.id) ? "checked" : ""} ${!p.ok || running() ? "disabled" : ""}></td><td><div class="product-cell">${p.image ? `<img class="product-thumb" src="${esc(p.image)}" alt="主图">` : ""}<div><div class="product-name">${esc(p.title)}</div><div class="product-meta">${esc(p.code)}</div><span class="mini-tag">${p.white ? "有白底图" : "无白底图"}</span></div></div></td><td>${p.priceRange.length ? `<div class="price">¥ ${Math.min(...p.priceRange).toFixed(2)}${Math.max(...p.priceRange) !== Math.min(...p.priceRange) ? " – " + Math.max(...p.priceRange).toFixed(2) : ""}</div>` : "—"}<div class="cell-sub">${p.sku} 个规格</div></td><td>${badge(p.ok ? "本地校验通过" : "需要补充", p.ok ? "green" : "amber")}</td><td>${btn("查看", "product", "text", `data-id="${p.id}"`)}${btn("主图一键编号", "image-names", "text", `data-id="${p.id}" ${running() || S.busyOp ? "disabled" : ""}`)}</td></tr>`).join("")}</tbody></table></div>`
     : `<div class="empty-note">${ico("folder-open")}${S.busyOp ? "正在读取本机资料，请稍候" : "请选择总素材库文件夹"}<br><p style="margin-top:8px">每个商品一个子文件夹，读取现有商品信息 Excel 和素材</p></div>`;
 }
 function tasksTable(tasks) {
@@ -230,6 +230,19 @@ async function click(b) {
     case "scan":
       await call("scan");
       break;
+    case "image-names": {
+      const plan=await call("mainImageNames",id);
+      dialogTask={id,token:plan.token};
+      overlay(`${head("主图一键编号", "按当前文件名的自然顺序编号，保留图片格式")}<div class="notice blue">请核对首图与排列顺序。当前模板要求5张主图，检测到 ${plan.mapping.length} 张。原图会自动备份，不修改Excel、白底图或其他素材。</div><div class="table-wrap"><table><thead><tr><th>当前文件名</th><th>编号后</th></tr></thead><tbody>${plan.mapping.map(m=>`<tr><td>${esc(m.from)}</td><td>${esc(m.to)}</td></tr>`).join("")}</tbody></table></div><div class="buttons">${btn("返回", "close")}${plan.changed?btn("确认编号并重新扫描", "apply-image-names", "primary"):'<span class="mini-tag">已是标准编号</span>'}</div>`);
+      break;
+    }
+    case "apply-image-names": {
+      const result=await call("mainImageNames",dialogTask.id,dialogTask.token);
+      close();
+      await call("scan");
+      toast(result.changed?`已编号 ${result.count} 张主图，原图备份已保留`:"主图已是标准编号");
+      break;
+    }
     case "add-shop":
       overlay(
         `${head("添加店铺", "填写后台展示的完整店铺名称")}<div class="field-label">平台</div><select id="shop-platform"><option value="dou">抖店</option><option value="pdd">拼多多（保留入口）</option></select><div class="field-label">完整店铺名称</div><input id="shop-name" class="text-input" placeholder="例如：星怡严选女装"><div class="buttons">${btn("取消", "close")}${btn("添加", "save-shop", "primary")}</div>`,

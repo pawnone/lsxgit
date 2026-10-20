@@ -26,6 +26,7 @@
     "prepare-product: 清理继承的行尾空白，逻辑不变",
     "run-draft: 接受APP登记的browser/page，新建页空白校验后填写",
     "shop-observation: 只读检测实际店名，区分未登录和身份不符",
-    "workspace: 每店固定工作页跨执行器复用，未知结果阻断清空"
+    "workspace: 每店固定工作页跨执行器复用，未知结果阻断清空",
+    "v0.3.3-alpha: APP按需加载执行器模块、后台生命周期与通知、Chrome后台参数、步骤耗时记录；商家表单适配及保存校验逻辑不变"
   ]
 }

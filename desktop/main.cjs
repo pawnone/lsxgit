@@ -7,12 +7,18 @@ const {
   dialog,
   shell,
   Menu,
+  Notification,
+  powerSaveBlocker,
+  Tray,
+  nativeImage,
 } = require("electron");
 const path = require("node:path"),
   fs = require("node:fs/promises"),
   { pathToFileURL } = require("node:url"),
   crypto = require("node:crypto");
 app.setName("文青尚品");
+if (process.platform === "win32") app.setAppUserModelId("com.wenqing.shangpin");
+const {createBackgroundController} = require("./background.cjs");
 if (process.env.WQ_APP_DATA_DIR)
   app.setPath("userData", path.resolve(process.env.WQ_APP_DATA_DIR));
 protocol.registerSchemesAsPrivileged([
@@ -24,6 +30,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 let win,
   service,
+  background,
+  tray,
   exitAfterCurrent = false;
 const media = new Map(),
   tokens = new Map(),
@@ -43,7 +51,13 @@ function publicState() {
     }
   return s;
 }
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+}
 function sendState() {
+  background?.update(service.run, service.running);
   if (win && !win.isDestroyed())
     win.webContents.send("wqapp:state", publicState());
   if (exitAfterCurrent && !service.running) app.quit();
@@ -61,6 +75,8 @@ async function handle(op, p = {}) {
       if (!d.canceled) await service.setRoot(d.filePaths[0]);
       return publicState();
     }
+    case "main-image-names":
+      return service.mainImageNames(p.id,p.token);
     case "scan":
       await service.scan();
       return publicState();
@@ -218,6 +234,7 @@ else {
           contextIsolation: true,
           sandbox: true,
           webSecurity: true,
+          backgroundThrottling: false,
         },
       });
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -241,6 +258,19 @@ else {
           return { ok: false, error: e.message };
         }
       });
+      background = createBackgroundController({powerSaveBlocker, Notification, showWindow,
+        fallback: (title, body) => { if (win && !win.isDestroyed()) { win.flashFrame(true); win.setTitle(`${title} · 文青尚品`); } console.warn(title, body); }});
+      background.update(service.run, service.running);
+      // Native tray keeps hidden windows reachable even when notifications are disabled.
+      const trayIcon = nativeImage.createFromPath(path.join(__dirname, "assets/tray.png"));
+      tray = new Tray(trayIcon);
+      tray.setToolTip("文青尚品");
+      tray.setContextMenu(Menu.buildFromTemplate([
+        {label:"打开文青尚品", click:showWindow},
+        {label:"退出（运行时先完成当前商品）", click:() => app.quit()},
+      ]));
+      tray.on("click", showWindow);
+      win.on("focus", () => { win.flashFrame(false); win.setTitle("文青尚品"); });
       service.on("state", sendState);
       win.on("close", (event) => {
         if (service.running) {
@@ -326,5 +356,6 @@ else {
       if (win) win.close();
     }
   });
+  app.on("will-quit", () => { background?.dispose(); tray?.destroy(); });
   app.on("window-all-closed", () => app.quit());
 }

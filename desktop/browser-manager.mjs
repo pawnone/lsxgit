@@ -16,6 +16,10 @@ export class BrowserManager {
   async detectExecutable() {
     const candidates = [
       this.executable,
+      ...(process.platform === "win32" ? [
+        ...[process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA]
+          .filter(Boolean).map(base => path.join(base, "Google", "Chrome", "Application", "chrome.exe")),
+      ] : []),
       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       path.join(
         os.homedir(),
@@ -52,6 +56,9 @@ export class BrowserManager {
         `--user-data-dir=${profile}`,
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
         "https://fxg.jinritemai.com",
       ],
       { detached: true, stdio: "ignore", shell: false },

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("wqapp", {
   getState: () => invoke("state"),
   chooseRoot: () => invoke("choose-root"),
   scan: () => invoke("scan"),
+  mainImageNames: (id, token) => invoke("main-image-names", {id,token}),
   addShop: (name, platform) => invoke("add-shop", { name, platform }),
   select: (selection) => invoke("select", selection),
   openLogin: (id) => invoke("open-login", { id }),

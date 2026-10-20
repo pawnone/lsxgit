@@ -2,16 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import util from "node:util";
-import { chromium } from "playwright-core";
-import {
-  prepareWorkspace,
-  markWorkspace,
-} from "../engine/doudian/workspace.mjs";
-import { prepareProduct } from "../engine/doudian/prepare-product.mjs";
-import { scanProducts } from "../engine/doudian/scan-products.mjs";
-import { validateConfig, executeDraft } from "../engine/doudian/run-draft.mjs";
-import { observeShop, focusShop } from "../engine/doudian/shop-observation.mjs";
-import { inspectShop } from "../engine/doudian/shop-guard.mjs";
+// Load only the operation's dependencies; login checks do not parse Excel or load listing adapters.
 process.on("disconnect", () => process.exit(1));
 process.stdout.on("error", () => process.exit(1));
 function emit(message) {
@@ -63,6 +54,8 @@ export function assertAdapterRange(c) {
 }
 async function prepare(input, dir) {
   const output = path.join(dir, "resolved-product-config.json");
+  const {prepareProduct} = await import("../engine/doudian/prepare-product.mjs");
+  const {validateConfig} = await import("../engine/doudian/run-draft.mjs");
   const r = await prepareProduct({
     input,
     output,
@@ -87,6 +80,7 @@ async function prepare(input, dir) {
   };
 }
 async function scan({ root, workDir }) {
+  const {scanProducts} = await import("../engine/doudian/scan-products.mjs");
   await fs.mkdir(workDir, { recursive: true });
   const manifestFile = path.join(workDir, "scan.json");
   let manifest;
@@ -121,6 +115,9 @@ async function scan({ root, workDir }) {
   return { root, products: result, errors };
 }
 async function execute(req) {
+  const {chromium} = await import("playwright-core");
+  const {prepareWorkspace,markWorkspace} = await import("../engine/doudian/workspace.mjs");
+  const {validateConfig,executeDraft} = await import("../engine/doudian/run-draft.mjs");
   const { config, expectedHash, endpoint, expectedShop, outputDir } = req;
   if (
     !expectedShop ||
@@ -224,12 +221,13 @@ try {
   let result;
   if (op === "scan") result = await scan(payload);
   else if (op === "observe")
-    result = await observeShop(payload.endpoint, payload.expectedShop);
+    result = await (await import("../engine/doudian/shop-observation.mjs")).observeShop(payload.endpoint, payload.expectedShop);
   else if (op === "focus")
-    result = await focusShop(payload.endpoint, payload.expectedShop);
+    result = await (await import("../engine/doudian/shop-observation.mjs")).focusShop(payload.endpoint, payload.expectedShop);
   else if (op === "verify")
-    result = await inspectShop(payload.endpoint, payload.expectedShop);
+    result = await (await import("../engine/doudian/shop-guard.mjs")).inspectShop(payload.endpoint, payload.expectedShop);
   else if (op === "validate") {
+    const {validateConfig} = await import("../engine/doudian/run-draft.mjs");
     const v = await validateConfig(payload.config);
     assertAdapterRange(payload.config);
     result = v;

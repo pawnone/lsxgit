@@ -2,7 +2,9 @@
 
 本机桌面 APP，使用已有抖店 Playwright 执行器读取本机 Excel 和素材，逐店、逐商品保存草稿。运行不依赖 Workbuddy、Codex、模型接口或系统 Node.js。
 
-当前版本 **v0.3.2-alpha**：macOS Apple 芯片本机测试版。已接入抖店；拼多多保留入口，尚未开放执行。当前抖店适配范围为 **服装 > 女装 > 时尚套装、5张主图、现货预售混合**，不能据此推定支持其他类目、Windows 或所有后台改版。
+当前版本 **v0.3.4-alpha**：macOS Apple 芯片本机测试版，另提供 Windows x64 测试包（Win10/Win11共用，未做Windows实机验收）。已接入抖店；拼多多保留入口，尚未开放执行。当前抖店适配范围为 **服装 > 女装 > 时尚套装、5张主图、现货预售混合**，不能据此推定支持其他类目、Windows 或所有后台改版。
+
+新增主图一键编号、原图备份与失败恢复，后台防休眠、托盘与系统状态通知，以及执行器按需加载。详见 [更新与检查说明](优化与Windows交付说明.md)。
 
 ## 直接使用 Mac APP
 
@@ -46,6 +48,8 @@ npm test
 npm run test:native
 npm run test:workspace
 npm run build:mac
+npm run build:win
+node scripts/check-rename-native.mjs
 ```
 
 `npm start` / `npm run app` 打开真实 Electron APP；`build:mac` 使用当前 Mac 架构生成 `release/文青尚品-darwin-arm64/文青尚品.app`（Apple芯片）。运行产物已包含 Electron 的 Node 运行时及生产依赖。

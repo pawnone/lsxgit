@@ -1,6 +1,6 @@
 # 文青尚品项目约定
 
-- 当前为v0.3.2-alpha本机Mac APP，真实运行入口desktop/main.cjs；demo/仍是模拟原型，勿混淆两者结果。
+- 当前为v0.3.4-alpha本机Mac APP及Windows x64测试包（Windows实机未验收），真实运行入口desktop/main.cjs；demo/仍是模拟原型，勿混淆两者结果。
 - 复用engine/doudian/内的执行器；改动记录在UPSTREAM.json。只用标准Playwright API，不按店名打补丁，不靠像素点填写商家表单。
 - 一批一个平台，可选同平台多店。店铺登录、精确核对分开；未就绪目标阻断。拼多多只保留入口。
 - 开始前展示商品×店铺任务，冻结资料与输入哈希；运行/暂停时禁止修改目标。任务串行，历史使用原批次快照。

@@ -1,0 +1,32 @@
+import {_electron as electron} from 'playwright-core';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),root=path.resolve(import.meta.dirname,'..');
+const temp=await fs.mkdtemp(path.join(os.tmpdir(),'wq-rename-native-'));
+const materials=path.join(temp,'materials'),product=path.join(materials,'商品01'),main=path.join(product,'主图'),data=path.join(temp,'appdata');
+let app;
+try {
+ await fs.mkdir(main,{recursive:true});await fs.mkdir(data);
+ await fs.writeFile(path.join(product,'商品信息.json'),JSON.stringify({assetMode:'directory',itemCode:'RENAME-UI-ONLY',title:'主图编号离线检查'}));
+ const bytes=await fs.readFile(path.join(root,'desktop/assets/tray.png'));
+ for(let n=1;n<=5;n++)await fs.writeFile(path.join(main,`相机照片${n}.png`),bytes);
+ await fs.writeFile(path.join(data,'config.json'),JSON.stringify({schema:1,materialsRoot:materials,shops:[],selectedShopIds:[],selectedProductIds:[]}));
+ const env={...process.env,WQ_APP_DATA_DIR:data};delete env.ELECTRON_RUN_AS_NODE;
+ app=await electron.launch({executablePath:require('electron'),args:[root],env});
+ const win=await app.firstWindow();win.setDefaultTimeout(12000);
+ await win.getByRole('button',{name:'主图一键编号',exact:true}).waitFor();
+ await win.getByRole('button',{name:'主图一键编号',exact:true}).click();
+ await win.getByRole('button',{name:'确认编号并重新扫描',exact:true}).waitFor();
+ assert.equal(await win.getByRole('cell',{name:'01.png',exact:true}).count(),1);
+ await win.getByRole('button',{name:'确认编号并重新扫描',exact:true}).click();
+ await win.getByText('已编号 5 张主图，原图备份已保留',{exact:true}).waitFor();
+ assert.deepEqual((await fs.readdir(main)).sort(),['01.png','02.png','03.png','04.png','05.png']);
+ for(const name of await fs.readdir(main))assert.deepEqual(await fs.readFile(path.join(main,name)),bytes);
+ assert.equal((await fs.readdir(path.join(product,'.wq-main-image-backups'))).length,1);
+ await win.getByRole('button',{name:'主图一键编号',exact:true}).click();
+ await win.getByText('已是标准编号',{exact:true}).waitFor();
+ console.log(JSON.stringify({checks:['未通过资料校验的商品也可打开编号','预览原名与编号对应关系','点击确认后实际文件改名','图片字节保持一致','备份原图并重新扫描','重复点击显示已是标准编号'],merchantMutation:false}));
+}catch(e){if(app)console.error(await (await app.firstWindow()).locator('body').innerText());throw e;}finally{if(app)await app.close();await fs.rm(temp,{recursive:true,force:true});}

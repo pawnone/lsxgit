@@ -64,6 +64,11 @@ try {
     runtime.electron && runtime.node,
     "APP自带Node执行器可启动，无需系统Node",
   );
+  assert(await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.getBackgroundThrottling() === false), "APP关闭后台渲染限速");
+  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].hide());
+  const hiddenState = await win.evaluate(() => window.wqapp.getState());
+  assert(!!hiddenState.config, "隐藏后主进程与IPC仍可用");
+  await app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].show());
   await win.locator('[data-act="add-shop"]').first().click();
   await win.locator("#shop-name").fill("原生界面测试店");
   await win.locator('[data-act="save-shop"]').click();

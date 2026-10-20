@@ -1,6 +1,6 @@
 {
   "name": "wenqing-shangpin",
-  "version": "0.3.2-alpha",
+  "version": "0.3.4-alpha",
   "private": true,
   "description": "文青尚品本机桌面APP：抖店多店多商品自动保存草稿",
   "type": "commonjs",
@@ -22,7 +22,8 @@
     "build:mac": "node scripts/build-mac.mjs",
     "test:native": "node scripts/check-native.mjs",
     "test:safety": "node scripts/check-safety.mjs",
-    "test:workspace": "node scripts/check-workspace.mjs"
+    "test:workspace": "node scripts/check-workspace.mjs",
+    "build:win": "node scripts/build-win.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
