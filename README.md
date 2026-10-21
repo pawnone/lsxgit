@@ -2,7 +2,7 @@
 
 本机桌面 APP，使用已有抖店 Playwright 执行器读取本机 Excel 和素材，逐店、逐商品保存草稿。运行不依赖 Workbuddy、Codex、模型接口或系统 Node.js。
 
-当前版本 **v0.3.4-alpha**：macOS Apple 芯片本机测试版，另提供 Windows x64 测试包（Win10/Win11共用，未做Windows实机验收）。已接入抖店；拼多多保留入口，尚未开放执行。当前抖店适配范围为 **服装 > 女装 > 时尚套装、5张主图、现货预售混合**，不能据此推定支持其他类目、Windows 或所有后台改版。
+当前 Mac 版本 **v0.3.7-alpha**：macOS Apple 芯片本机测试版，另提供同版本 Windows x64 测试包（Win10/Win11共用，未做Windows实机验收）。已接入抖店；拼多多保留入口，尚未开放执行。当前抖店适配范围为 **服装 > 女装 > 时尚套装、服装 > 女装 > 针织衫/毛衣/羊毛衫，5张主图、现货预售混合**，不能据此推定支持其他类目、Windows 或所有后台改版。
 
 新增主图一键编号、原图备份与失败恢复，后台防休眠、托盘与系统状态通知，以及执行器按需加载。详见 [更新与检查说明](优化与Windows交付说明.md)。
 
@@ -50,6 +50,9 @@ npm run test:workspace
 npm run build:mac
 npm run build:win
 node scripts/check-rename-native.mjs
+node scripts/check-category-entry.mjs
+node scripts/check-category-attributes.mjs
+node scripts/check-service-fields.mjs
 ```
 
 `npm start` / `npm run app` 打开真实 Electron APP；`build:mac` 使用当前 Mac 架构生成 `release/文青尚品-darwin-arm64/文青尚品.app`（Apple芯片）。运行产物已包含 Electron 的 Node 运行时及生产依赖。
@@ -67,3 +70,9 @@ demo/               早期交互原型及共享图标/样式
 ```
 
 检查结果与限制见 `APP检查记录.md`；版本见 `CHANGELOG.md`。不提交密码、Cookie、登录资料、真实 Excel、视频、回执或本机配置。第三方许可见 `THIRD_PARTY_NOTICES.md`。
+
+## 针织衫模板
+
+新模板将商品属性集中到“基础信息”：第4–21行为原有必填字段，第22–49行为28项针织衫选填属性，不再增加独立工作表。四列为字段名称、填写内容、填写要求、填写说明。按真实商品填黄色格；必填/选填提示不能代替脚本校验。类目仍由基础信息中的完整类目路径确定。
+
+旧套装Excel继续兼容；旧针织衫分表模板仍可读取，同一文件不能同时出现两份属性。合并前后标准化商品数据一致，原值不自动修改。材质仍限单项100%。2026-10-21已用独立本地脚本在星怡严选女装完整保存1份针织衫草稿，5个SKU编码、价格、库存回读一致；相同执行代码同步到Mac。运费、售后按Excel主动选择并回读；选填属性的全部组合与Windows仍未实测。

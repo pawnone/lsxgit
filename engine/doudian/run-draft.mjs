@@ -2,10 +2,11 @@
 import {reconcileSpecs,verifySpecs} from './spec-reconcile.mjs';
 import {assertBlankProductEntry} from './workspace.mjs';
 import {resolveEntry} from './entry-state.mjs';
+import {selectWizardCategory,verifyWizardCategory} from './category-entry.mjs';
 import {uploadMaterialEntry,waitMaterialEntryReady} from './material-entry.mjs';
 import {installSafetyGuard,assertSafetyClear} from './safety-guard.mjs';
 import {bindSpecImages,specImageBindings} from './spec-images.mjs';
-import {fillProductAttributes} from './product-attributes.mjs';
+import {fillProductAttributes,desiredAttributes,fillSingleSelectField} from './product-attributes.mjs';
 import { assertPageShop } from './shop-guard.mjs';
 import { uploadWhiteImage } from './platforms/doudian.mjs';
 import fs from "node:fs/promises";
@@ -132,6 +133,8 @@ async function validateConfig(config) {
   if (!String(product.categoryPath ?? "").trim()) {
     addError(result, "MISSING_CATEGORY", "缺少抖店类目路径；脚本不会猜类别，请先填写 categoryPath");
   }
+  try {desiredAttributes(config);} catch(e) {addError(result,'CATEGORY_ATTRIBUTES',e.message);}
+  if (Number(product.materialPercent)!==100) addError(result,'MATERIAL_RANGE','当前仅支持单一面料材质100%，不会把混合材质改为100%');
   if (!config.draftOnly) addError(result, "PUBLISH_GUARD", "draftOnly 必须为 true，脚本禁止自动发布");
   try{specImageBindings(config);}catch(e){addError(result,'SPEC_IMAGE_MAPPING',e.message);}
   const images = Array.isArray(product.mainImages) ? product.mainImages : [];
@@ -384,20 +387,10 @@ async function completeLegacyWizard(page, config, validation) {
     }
     if (await titleInput.inputValue() !== config.product.title) await titleInput.fill(config.product.title);
     await titleInput.press('Tab'); // Commit title before category recommendation/next-step validation.
-    // 推荐类目异步生成；仍未就绪时才打开手动选择。
-    await page.waitForFunction(() => { const b=[...document.querySelectorAll('button')].find(e=>e.innerText==='下一步'); return b && !b.disabled; }, null, {timeout:15000}).catch(()=>{});
-    if (await page.getByRole('button',{name:'下一步',exact:true}).isDisabled() || !await page.getByText(config.product.categoryPath,{exact:true}).count()) {
-      await page.getByText('手动选择类目',{exact:true}).click({timeout:10000});
-    }
   }
-  if (await dialog.isVisible()) {
-    for (const part of config.product.categoryPath.split('>').map(x=>x.trim())) {
-      await dialog.getByText(part,{exact:true}).click({timeout:10000});
-    }
-    await dialog.getByRole('button',{name:'确认',exact:true}).click({timeout:10000});
-    await dialog.waitFor({state:'hidden',timeout:10000});
-  }
-  await page.getByText(config.product.categoryPath,{exact:true}).waitFor({state:'visible',timeout:30000});
+  const categoryEvidence=await selectWizardCategory(page,config.product.categoryPath);
+  console.log('首步类目核对：'+JSON.stringify(categoryEvidence));
+  await verifyWizardCategory(page,config.product.categoryPath);
   await assertSafetyClear(page);
   console.log('旧版首步：标题已失焦提交，类目=' + config.product.categoryPath);
   await page.getByRole('button',{name:'下一步',exact:true}).click({timeout:10000});
@@ -527,6 +520,11 @@ async function executeDraft(config, validation, options) {
     });
     const skuReadback=await step("回读全部SKU价格库存",async()=>verifySkuTable(page,config));
     if(options.stopAfterPricing) return {ok:true,pricingOnly:true,skuReadback,pageUrl:page.url(),events};
+    await step("填写运费和售后",async()=>{
+      const freight=await fillSingleSelectField(page,'运费模板',config.service.freightTemplate);
+      const returns=await fillSingleSelectField(page,'售后政策',config.service.returnPolicy);
+      events.at(-1).readback={freight,returns};
+    });
     await step("保存前校验",async()=>{await verifySpecs(page,config);await verifyBeforeSave(page,config,skuReadback);});
     const saved=await step("保存草稿",async()=>saveDraft(page,config,OUTPUT_DIR,validation.inputHash));
     return {ok:true,pageUrl:page.url(),skuReadback,saved,events};

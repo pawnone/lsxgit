@@ -148,34 +148,36 @@ try {
   await win.waitForTimeout(200);
   await win.evaluate((s) => receive(s), realState);
   if (process.env.WQ_TEST_MATERIALS) {
+    const expectedSkus=(process.env.WQ_TEST_EXPECTED_SKUS || "4,12").split(",").map(Number).sort((a,b)=>a-b);
     for (let n = 0; ; n++) {
       const current = await win.evaluate(() => window.wqapp.getState());
-      if (!current.busyOp && current.products.length === 2) break;
+      if (!current.busyOp && current.products.length === expectedSkus.length) break;
       if (n > 120) throw Error("Material scan timeout");
       await new Promise((r) => setTimeout(r, 500));
     }
     const data = await win.evaluate(() => window.wqapp.getState());
     assert(
       data.products.every((p) => p.ok),
-      "本机两商品Excel与素材均通过真实离线校验",
+      "本机商品Excel与素材均通过真实离线校验",
     );
     assert(
       data.products
         .map((p) => p.sku)
         .sort((a, b) => a - b)
-        .join(",") === "4,12",
-      "真实识别商品01的4规格和商品02的12规格",
+        .join(",") === expectedSkus.join(","),
+      "真实识别指定商品的规格数量",
     );
     assert(
       data.products.every((p) => p.image.startsWith("wqasset://")),
       "主图通过受限本地媒体通道加载",
     );
     await win.waitForFunction(
-      () =>
-        [...document.querySelectorAll(".product-thumb")].length === 2 &&
+      (expected) =>
+        [...document.querySelectorAll(".product-thumb")].length === expected &&
         [...document.querySelectorAll(".product-thumb")].every(
           (i) => i.complete && i.naturalWidth > 0,
         ),
+      expectedSkus.length,
     );
     assert(true, "本地商品主图实际显示");
   }

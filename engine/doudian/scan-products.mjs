@@ -30,7 +30,7 @@ export async function scanProducts(root, output, {cdpUrl='http://127.0.0.1:9223'
       if(codes.has(key))throw new Error(`重复货号：${code}`);
       codes.add(key);
       const id='dou-'+crypto.createHash('sha256').update(key).digest('hex').slice(0,16);
-      products.push({id,platform,itemCode:code,title:p.title,materialRoot:path.relative(path.dirname(output),dir).split(path.sep).join('/')});
+      products.push({id,platform,itemCode:code,title:p.title,categoryPath:p.categoryPath,materialRoot:path.relative(path.dirname(output),dir).split(path.sep).join('/')});
     }catch(e){errors.push({folder:dir,error:e.message});}
   }
   if(!products.length && !errors.length) errors.push({folder:root,error:'没有找到商品子文件夹；请在总素材库下放商品01、商品02等目录，每个目录包含商品信息/商品信息.xlsx及主图等素材' });

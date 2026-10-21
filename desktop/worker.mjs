@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import util from "node:util";
+import {SUPPORTED_CATEGORIES} from "../engine/doudian/category-rules.mjs";
 // Load only the operation's dependencies; login checks do not parse Excel or load listing adapters.
 process.on("disconnect", () => process.exit(1));
 process.stdout.on("error", () => process.exit(1));
@@ -22,12 +23,12 @@ async function json(file) {
 export function assertAdapterRange(c) {
   if (c.draftOnly !== true) throw Error("只允许保存草稿");
   if (
-    c.product.categoryPath !== "服装 > 女装 > 时尚套装" ||
+    !SUPPORTED_CATEGORIES.includes(c.product.categoryPath) ||
     c.product.mainImages.length !== 5 ||
     c.inventory.shippingMode !== "现货预售混合"
   )
     throw Error(
-      "当前抖店适配范围：服装 > 女装 > 时尚套装、5张主图、现货预售混合；请勿套用其他类目",
+      "当前抖店适配范围：时尚套装、针织衫/毛衣/羊毛衫，5张主图、现货预售混合；请勿套用其他类目",
     );
   if (
     !c.product.materialTagImage ||

@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
+import {KNIT_CATEGORY,KNIT_ATTRIBUTES,normalizeCategoryAttributes,assertCategory} from './category-rules.mjs';
 export const baseFields=[
- ['商品名称','title','必填'],['货号','itemCode','必填；两个商品不能重复'],['品牌','brand','必填；无品牌请填无品牌'],['完整类目路径','categoryPath','当前支持服装 > 女装 > 时尚套装'],['材质名称','material','按吊牌精确填写'],['材质含量（%）','materialPercent','填写1–100的数字，例如100，不输入百分号'],['现货库存','inStock','每个SKU最终库存，填写非负整数'],['预售库存','preSale','每个SKU最终库存，填写非负整数'],['发货模式','shippingMode','当前支持现货预售混合'],['现货发货时间','inStockDelivery','已确认48小时'],['预售周期','preSaleDelivery','例如15天'],['库存计数','stockCountMode','已确认下单减库存'],['运费模板','freightTemplate','填写店铺实际模板名称'],['售后政策','returnPolicy','填写店铺实际选项名称'],['最终操作','operation','固定保存草稿，不发布'],['组合件数','pieceCount','必填，使用平台选项：单件、两件等'],['适用年龄','applicableAge','必填，填写平台完整年龄选项，不自动换算'],['风格','style','必填，填写平台风格名称；多个用顿号分隔']];
+ ['商品名称','title','必填'],['货号','itemCode','必填；两个商品不能重复'],['品牌','brand','必填；无品牌请填无品牌'],['完整类目路径','categoryPath','支持时尚套装、针织衫/毛衣/羊毛衫；填写完整路径'],['材质名称','material','按吊牌精确填写'],['材质含量（%）','materialPercent','填写1–100的数字，例如100，不输入百分号'],['现货库存','inStock','每个SKU最终库存，填写非负整数'],['预售库存','preSale','每个SKU最终库存，填写非负整数'],['发货模式','shippingMode','当前支持现货预售混合'],['现货发货时间','inStockDelivery','已确认48小时'],['预售周期','preSaleDelivery','例如15天'],['库存计数','stockCountMode','已确认下单减库存'],['运费模板','freightTemplate','填写店铺实际模板名称'],['售后政策','returnPolicy','填写店铺实际选项名称'],['最终操作','operation','固定保存草稿，不发布'],['组合件数','pieceCount','必填，使用平台选项：单件、两件等'],['适用年龄','applicableAge','必填，填写平台完整年龄选项，不自动换算'],['风格','style','必填，填写平台风格名称；多个用顿号分隔']];
 export async function readExcelProduct(file) {
  const book=new ExcelJS.Workbook();await book.xlsx.readFile(file);
  const sheet=name=>{const s=book.getWorksheet(name);if(!s)throw new Error(`Excel缺少工作表：${name}`);return s;};
@@ -16,6 +17,40 @@ export async function readExcelProduct(file) {
 const missing=[];
 baseFields.forEach(([label,key],i)=>{const row=i+4;if(value(b.getCell(row,1))!==label)throw new Error(`基础信息!A${row} 标签已改变，应为：${label}`);const v=value(b.getCell(row,2));if(v===''||/【|待填写|待确认/.test(String(v)))missing.push(`${label}（基础信息!B${row}）`);else f[key]=v;});
 if(missing.length)throw new Error(`Excel未填写：${missing.join('、')}；请补齐后重新预检`);
+ assertCategory(String(f.categoryPath));
+ let categoryAttributes;
+ const legacy=book.getWorksheet('类目属性');
+ const inlineRows=[];
+ for(let r=22;r<=b.rowCount;r++){
+  const label=value(b.getCell(r,1)),v=value(b.getCell(r,2));
+  if(label===''&&v==='')continue;
+  inlineRows.push({label,v,row:r});
+ }
+ if(String(f.categoryPath)===KNIT_CATEGORY){
+  if(inlineRows.length&&legacy)throw Error('针织衫属性同时存在于基础信息和旧工作表，请合并后只保留一处，避免重复填写');
+  let rows,source;
+  if(inlineRows.length){rows=inlineRows;source='基础信息';}
+  else if(legacy){
+   if(value(legacy.getCell('A2'))!=='完整类目路径'||value(legacy.getCell('B2'))!==f.categoryPath)throw Error('旧类目属性工作表与基础信息的类目路径不一致');
+   if(value(legacy.getCell('A4'))!=='字段名称'||value(legacy.getCell('B4'))!=='填写内容')throw Error('旧类目属性表头应为字段名称、填写内容');
+   rows=[];source='类目属性';
+   for(let r=5;r<=legacy.rowCount;r++){const label=value(legacy.getCell(r,1)),v=value(legacy.getCell(r,2));if(label!==''||v!=='')rows.push({label,v,row:r});}
+  }else throw Error('针织衫基础信息缺少属性字段，请使用合并版针织衫模板（仍兼容旧类目属性工作表）');
+  const raw={},seen=new Set();
+  for(const {label,v,row}of rows){
+   if(!KNIT_ATTRIBUTES.some(f=>f.label===label))throw Error(source+'!A'+row+' 未知属性字段：'+label);
+   if(seen.has(label))throw Error('属性字段重复：'+label);seen.add(label);raw[label]=v;
+  }
+  const missing=KNIT_ATTRIBUTES.filter(f=>!seen.has(f.label));
+  if(missing.length)throw Error('模板缺少属性字段行：'+missing.map(f=>f.label).join('、'));
+  categoryAttributes=normalizeCategoryAttributes(String(f.categoryPath),raw);
+ }else{
+  if(inlineRows.length)throw Error('时尚套装基础信息包含其他类目的属性，请使用对应套装模板');
+  if(legacy){
+   if(value(legacy.getCell('B2'))!==f.categoryPath)throw Error('旧类目属性工作表与基础信息的类目路径不一致');
+   for(let r=5;r<=legacy.rowCount;r++)if(value(legacy.getCell(r,2))!=='')throw Error('时尚套装不能填写针织衫属性');
+  }
+ }
  if(f.operation!=='保存草稿')throw new Error('仅允许保存草稿');
  const materialPercent=number(f.materialPercent,'材质含量');if(materialPercent<=0||materialPercent>100)throw new Error('材质含量必须大于0且不超过100');
  const specs=sheet('款式与尺码'),colors=[],sizes=[],sizeChart=[],skuMatrix=[];
@@ -55,5 +90,5 @@ if(missing.length)throw new Error(`Excel未填写：${missing.join('、')}；请
  const optional=(flagRow,pathRow,label)=>{const yes=flag(flagRow,label)==='有',v=get(pathRow);if(yes)return required(v,label+'路径')==='无'?(()=>{throw new Error(label+'已选有但路径为无');})():String(v);if(v!==''&&v!=='无')throw new Error(label+'已选无，请清空路径或填无');return '';};
  mediaInfo={mainImages:[4,5,6,7,8].map(r=>String(required(get(r),`主图${r-3}路径`))),materialTagImage:String(required(get(10),'吊牌图路径')),whiteBackgroundImage:optional(12,13,'白底图'),whiteBackgroundFor:String(get(14)),video:optional(16,17,'视频'),videoDeclaredNone:get(16)==='无'};
  }
- return {title:String(f.title),itemCode:String(f.itemCode),brand:String(f.brand),categoryPath:String(f.categoryPath),material:String(f.material),materialPercent,pieceCount:String(f.pieceCount),applicableAge:String(f.applicableAge),style:String(f.style),composition:`${materialPercent}% ${f.material}`,...mediaInfo,colors,sizes,sizeChart,skuMatrix,inventory:{shippingMode:f.shippingMode,inStockDelivery:f.inStockDelivery,preSaleDelivery:f.preSaleDelivery,inStock:number(f.inStock,'现货库存',true),preSale:number(f.preSale,'预售库存',true),stockOperation:'set-final-value',stockCountMode:f.stockCountMode},service:{freightTemplate:f.freightTemplate,returnPolicy:f.returnPolicy}};
+ return {...(categoryAttributes!==undefined?{categoryAttributes}:{}),title:String(f.title),itemCode:String(f.itemCode),brand:String(f.brand),categoryPath:String(f.categoryPath),material:String(f.material),materialPercent,pieceCount:String(f.pieceCount),applicableAge:String(f.applicableAge),style:String(f.style),composition:`${materialPercent}% ${f.material}`,...mediaInfo,colors,sizes,sizeChart,skuMatrix,inventory:{shippingMode:f.shippingMode,inStockDelivery:f.inStockDelivery,preSaleDelivery:f.preSaleDelivery,inStock:number(f.inStock,'现货库存',true),preSale:number(f.preSale,'预售库存',true),stockOperation:'set-final-value',stockCountMode:f.stockCountMode},service:{freightTemplate:f.freightTemplate,returnPolicy:f.returnPolicy}};
 }

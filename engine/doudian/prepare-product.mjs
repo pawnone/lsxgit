@@ -246,6 +246,7 @@ function mergeCanonical(info, assets, options) {
       itemCode: product.itemCode || "",
       brand: product.brand || "",
       categoryPath: product.categoryPath || "",
+      ...(product.categoryAttributes!==undefined?{categoryAttributes:product.categoryAttributes}:{}),
       style: product.style || "",
       pieceCount: product.pieceCount || "",
       applicableAge: product.applicableAge || "",

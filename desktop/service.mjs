@@ -97,11 +97,14 @@ export class ListingService extends EventEmitter {
           ? path.resolve(p.materialRoot, p.config.product.mainImages[0])
           : null,
         white: !!p.config?.product.whiteBackgroundImage,
+        category: p.config?.product.categoryPath || p.categoryPath || "",
         attributes: p.config
           ? {
               pieces: p.config.product.pieceCount,
               age: p.config.product.applicableAge,
               style: p.config.product.style,
+              category: p.config.product.categoryPath,
+              categoryAttributes: p.config.product.categoryAttributes,
             }
           : null,
       })),

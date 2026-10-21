@@ -1,3 +1,13 @@
+# v0.3.7-alpha Windows x64 共用包
+
+同一个包用于64位Win10和Win11，按x64目标构建。保留与Mac相同的针织衫模板读取、类目选择、运费售后填写、后台通知和主图编号功能。不是32位或原生ARM64包。
+
+完整解压后先安装Google Chrome，双击“安装快捷方式.cmd”，再从桌面或开始菜单打开“文青尚品”。不需要另外安装Node或智能体软件。使用方式见“Windows64位使用说明.md”。
+
+当前通过Mac上的单元测试、实际Mac App检查和针织衫实店草稿保存；Windows交付检查包括x64 PE格式、版本、源码与生产依赖一致性、资源和压缩包完整性。Win10/Win11的实际启动、系统通知及后台完整任务尚未实测。包未购买Windows代码签名证书。
+
+使用现有官方Electron与Packager组件，沿用锁定依赖。Electron官方平台说明为Windows 10及以上：https://github.com/electron/electron#platform-support 。旧版性能检查记录保留如下。
+
 # v0.3.4-alpha 检查与交付
 
 本次保持任务串行、只存草稿、店名核对、全量素材哈希、SKU保存前回读、安全限制立即停批和未知保存结果禁止重试。
