@@ -110,6 +110,22 @@ try {
   );
   assert.equal(context.pages().length, pageCount + 1);
   checks.push("重复工作页阻断，不随机选页或继续新开");
+  await assert.rejects(prepareWorkspace(client,{token:'local-store',expectedShop:'本地测试店',attemptId:'explicit-ambiguous',recreate:true}),/多个APP工作页/);
+  checks.push('明确重建也不随机选择归属重复的工作页');
+  await markWorkspace(duplicate,'local-store',{retired:true});
+  await markWorkspace(second.page,'local-store',{phase:'needs-review'});
+  const rebuilt=await prepareWorkspace(client,{token:'local-store',expectedShop:'本地测试店',attemptId:'explicit-rebuild',recreate:true});
+  assert.equal(rebuilt.created,false);assert.equal(rebuilt.page,second.page);await assertBlankProductEntry(rebuilt.page);
+  assert.equal((await workspaceState(rebuilt.page)).previousState.phase,'needs-review');
+  assert.equal(context.pages().length,pageCount+1);
+  checks.push('明确重建沿用本店工作页，保留旧状态摘要且页面不增长');
+  for(let n=0;n<12;n++){
+    await markWorkspace(rebuilt.page,'local-store',{phase:'confirmed'});
+    const next=await prepareWorkspace(client,{token:'local-store',expectedShop:'本地测试店',attemptId:'repeat-'+n,recreate:true});
+    assert.equal(next.page,rebuilt.page);assert.equal(next.created,false);
+    assert.equal(context.pages().length,pageCount+1);await assertBlankProductEntry(next.page);
+  }
+  checks.push('连续12次重建复用原页，每次进入空白新建，页面数量不增长');
   await client.close();
   client = null;
   assert.equal((await fetch(endpoint + "/json/version")).status, 200);

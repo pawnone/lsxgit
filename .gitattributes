@@ -2,3 +2,5 @@
 *.png binary
 *.jpg binary
 *.jpeg binary
+# Windows CMD must retain CRLF when checked out on either platform.
+*.cmd text eol=crlf

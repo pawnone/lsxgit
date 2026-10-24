@@ -4,6 +4,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { Store, readJson, writeJson } from "./storage.mjs";
 import {planMainImageNames,applyMainImageNames} from "./main-image-names.mjs";
+import {planPddImageSettings,applyPddImageSettings} from './pdd-image-settings.mjs';
+import {detailImagePlan} from '../engine/pdd/media.mjs';
 import { taskRecords } from "./task-records.mjs";
 const uuid = () => crypto.randomUUID(),
   hash = (s) =>
@@ -11,7 +13,7 @@ const uuid = () => crypto.randomUUID(),
 const failureType = (e) =>
   /SAFETY_BLOCKED/.test(e.message)
     ? "safety-blocked"
-    : /未确认|unconfirmed|未知|未提供保存成功/.test(e.message)
+    : ['EGO_USER_CONTROL','EGO_SPACE_INACTIVE','EGO_CONNECTION_LOST','EGO_EVENT_FAILED'].includes(e.code)||/未确认|unconfirmed|未知|未提供保存成功/.test(e.message)
       ? "needs-review"
       : "failed";
 export class ListingService extends EventEmitter {
@@ -21,6 +23,8 @@ export class ListingService extends EventEmitter {
     this.store = new Store(root);
     this.config = {
       schema: 1,
+      platform: "dou",
+      materialRoots: {},
       materialsRoot: "",
       shops: [],
       selectedShopIds: [],
@@ -33,10 +37,13 @@ export class ListingService extends EventEmitter {
     this.preflight = null;
     this.running = false;
     this.busyOp = false;
+    this.drivePromise = null;
   }
   async init() {
     await this.store.recoverLock();
     this.config = await this.store.read("config.json", this.config);
+    this.config.platform ??= "dou";
+    this.config.materialRoots ??= { dou: this.config.materialsRoot || "" };
     this.config.shops ??= [];
     this.config.selectedShopIds ??= [];
     this.config.selectedProductIds ??= [];
@@ -74,8 +81,8 @@ export class ListingService extends EventEmitter {
   }
   findShop(id) {
     const s = this.config.shops.find((s) => s.id === id);
-    if (!s || s.platform !== "dou")
-      throw Error("未找到抖店目标店铺，拼多多暂不开放执行");
+    if (!s || !["dou", "pdd"].includes(s.platform))
+      throw Error("未找到目标平台店铺");
     return s;
   }
   snapshot() {
@@ -92,14 +99,18 @@ export class ListingService extends EventEmitter {
         ok: p.ok,
         errors: p.errors || [],
         warnings: p.warnings || [],
-        priceRange: p.config?.skuMatrix.map((s) => s.price) || [],
+        priceRange: p.config?.skuMatrix.map((s) => p.config.platform === "pdd" ? s.groupPriceCents / 100 : s.price) || [],
         image: p.config?.product.mainImages?.[0]
           ? path.resolve(p.materialRoot, p.config.product.mainImages[0])
           : null,
         white: !!p.config?.product.whiteBackgroundImage,
         category: p.config?.product.categoryPath || p.categoryPath || "",
+        mediaPlan: this.mediaSummary(p),
         attributes: p.config
-          ? {
+          ? p.config.platform==='pdd' ? {
+              age:p.config.pdd.basic['适用年龄'],style:p.config.pdd.basic['风格'],
+              categoryAttributes:{...p.config.pdd.basic,...p.config.pdd.service},
+            } : {
               pieces: p.config.product.pieceCount,
               age: p.config.product.applicableAge,
               style: p.config.product.style,
@@ -125,6 +136,13 @@ export class ListingService extends EventEmitter {
     const r = structuredClone(run);
     r.tasks = r.tasks.map(({ config, ...t }) => t);
     return r;
+  }
+  mediaSummary(p){
+    if(p.config?.platform!=='pdd')return null;
+    const product=p.config.product,sources=product.sourceMainImages||product.mainImages||[];
+    const label=f=>path.basename(f,path.extname(f));
+    try{return {reuse:!!product.imageOrder,sourceCount:sources.length,
+      main:product.mainImages.map(label),details:detailImagePlan(product).map(f=>f===product.sizeImage?'尺码图':label(f))};}catch{return null;}
   }
   notify() {
     this.emit("state", this.snapshot());
@@ -154,7 +172,7 @@ export class ListingService extends EventEmitter {
       workspaceToken: uuid(),
     };
     this.config.shops.push(s);
-    if (platform === "dou" && !this.config.selectedShopIds.length)
+    if (platform === this.config.platform && !this.config.selectedShopIds.length)
       this.config.selectedShopIds = [s.id];
     this.preflight = null;
     await this.saveConfig();
@@ -169,7 +187,7 @@ export class ListingService extends EventEmitter {
         new Set(shopIds).size !== shopIds.length ||
         shopIds.some(
           (id) =>
-            !this.config.shops.some((s) => s.id === id && s.platform === "dou"),
+            !this.config.shops.some((s) => s.id === id && s.platform === this.config.platform),
         )
       )
         throw Error("店铺选择无效");
@@ -188,11 +206,25 @@ export class ListingService extends EventEmitter {
     await this.saveConfig();
     this.notify();
   }
+  async setPlatform(platform) {
+    this.ensureIdle();
+    if (!["dou", "pdd"].includes(platform)) throw Error("不支持的平台");
+    if (this.config.platform === platform) return this.snapshot();
+    this.config.materialRoots[this.config.platform] = this.config.materialsRoot;
+    this.config.platform = platform;
+    this.config.materialsRoot = this.config.materialRoots[platform] || "";
+    this.config.selectedShopIds = [];
+    this.config.selectedProductIds = [];
+    this.catalog = []; this.scanErrors = []; this.preflight = null; this.imageRenamePlan = null;
+    await this.saveConfig(); this.notify();
+    return this.config.materialsRoot ? this.scan() : this.snapshot();
+  }
   async setRoot(root) {
     this.ensureIdle();
     const st = await fs.stat(root);
     if (!st.isDirectory()) throw Error("素材库不是文件夹");
     this.config.materialsRoot = path.resolve(root);
+    this.config.materialRoots[this.config.platform] = this.config.materialsRoot;
     this.preflight = null;
     this.catalog = [];
     this.scanErrors = [];
@@ -201,6 +233,7 @@ export class ListingService extends EventEmitter {
   }
   async mainImageNames(id, token) {
     this.ensureIdle();
+    if(this.config.platform==='pdd')throw Error('拼多多主图请使用01～10编号；当前一键编号适用于抖店5张主图');
     const product=this.catalog.find(p=>p.id===id);
     if(!product)throw Error("未找到当前商品，请重新扫描");
     this.busyOp=true; this.notify();
@@ -217,6 +250,37 @@ export class ListingService extends EventEmitter {
       return await applyMainImageNames(this.config.materialsRoot,product.materialRoot,plan.signature);
     } finally {this.busyOp=false;this.notify();}
   }
+  async imageSettings(id,token,selection){
+    this.ensureIdle();
+    if(this.config.platform!=='pdd')throw Error('当前首图选择适用于拼多多；抖店继续使用一键编号');
+    const product=this.catalog.find(p=>p.id===id);
+    if(!product)throw Error('未找到当前商品，请重新扫描');
+    this.busyOp=true;this.notify();
+    try{
+      if(!token){
+        const plan=await planPddImageSettings(this.config.materialsRoot,product.materialRoot);
+        const key=uuid();this.imageSettingsPlan={id,key,signature:plan.signature,root:this.config.materialsRoot};
+        return {id,token:key,changed:plan.changed,selected:plan.selected,uniqueCount:plan.uniqueCount,recovered:plan.recovered,
+          hasSize:!!product.config?.product.sizeImage,
+          pictures:plan.mapping.map(m=>({id:m.id,from:m.from,image:m.file,hash:m.sha256}))};
+      }
+      const current=this.imageSettingsPlan;this.imageSettingsPlan=null;
+      if(!current||current.id!==id||current.key!==token||current.root!==this.config.materialsRoot)throw Error('首图选择已失效，请重新打开');
+      this.preflight=null;
+      return await applyPddImageSettings(this.config.materialsRoot,product.materialRoot,current.signature,selection,{rename:false});
+    }finally{this.busyOp=false;this.notify();}
+  }
+  async numberPddImages(id){
+    this.ensureIdle();
+    if(this.config.platform!=='pdd')throw Error('当前平台请使用原主图编号入口');
+    const product=this.catalog.find(p=>p.id===id);
+    if(!product)throw Error('未找到当前商品，请重新扫描');
+    this.busyOp=true;this.preflight=null;this.imageSettingsPlan=null;this.notify();
+    try{
+      const plan=await planPddImageSettings(this.config.materialsRoot,product.materialRoot);
+      return await applyPddImageSettings(this.config.materialsRoot,product.materialRoot,plan.signature,plan.selected,{rename:true,setFirst:false});
+    }finally{this.busyOp=false;this.notify();}
+  }
   async scan() {
     this.ensureIdle();
     if (!this.config.materialsRoot) throw Error("请先选择本机总素材库文件夹");
@@ -226,7 +290,8 @@ export class ListingService extends EventEmitter {
     try {
       const r = await this.runner.call("scan", {
         root: this.config.materialsRoot,
-        workDir: path.join(this.root, "catalog"),
+        workDir: path.join(this.root, "catalog", this.config.platform),
+        platform: this.config.platform,
       });
       this.catalog = r.products;
       this.scanErrors = r.errors || [];
@@ -258,7 +323,7 @@ export class ListingService extends EventEmitter {
     } catch (e) {
       if (failureType(e) === "safety-blocked") shop.securityBlocked = true;
       this.applyObservation(shop, {
-        status: shop.securityBlocked ? "safety-blocked" : "connection-error",
+        status: shop.securityBlocked ? "safety-blocked" : /由你控制/.test(e.message) ? "awaiting-user" : "connection-error",
         loggedIn: false,
         error: e.message,
       });
@@ -272,7 +337,7 @@ export class ListingService extends EventEmitter {
     this.notify();
     try {
       for (const shop of this.config.shops.filter(
-        (s) => s.platform === "dou",
+        (s) => ["dou", "pdd"].includes(s.platform),
       )) {
         await this.observeOne(shop);
         await this.saveConfig();
@@ -287,6 +352,7 @@ export class ListingService extends EventEmitter {
   async openLogin(id, { fresh = false } = {}) {
     this.ensureIdle();
     const shop = this.findShop(id);
+    if(fresh&&shop.platform==='pdd')throw Error('请在本店 Ego 工作空间手动退出并登录目标店铺，再点击核对');
     this.preflight = null;
     this.busyOp = true;
     this.notify();
@@ -309,6 +375,7 @@ export class ListingService extends EventEmitter {
         await this.saveConfig();
       }
       await this.browser.open(shop);
+      if(shop.platform==='pdd')return {message:'本店 Ego 工作空间已打开。请人工登录，返回文青尚品点击“核对”后再测试。'};
       await this.observeOne(shop);
       await this.saveConfig();
       return {
@@ -372,6 +439,8 @@ export class ListingService extends EventEmitter {
       products = this.config.selectedProductIds.map((id) =>
         this.catalog.find((p) => p.id === id),
       );
+    if (targets.some(s => s.platform !== this.config.platform)) throw Error("本批店铺必须属于同一平台");
+    if (products.some(p => p?.config?.platform && p.config.platform !== this.config.platform && !(this.config.platform === "dou" && p.config.platform === "doudian"))) throw Error("商品素材与本批平台不一致");
     if (products.some((p) => !p?.ok))
       throw Error("所选商品存在缺失或校验错误，请先修正资料并重新扫描");
     for (const s of targets)
@@ -400,15 +469,15 @@ export class ListingService extends EventEmitter {
               if (
                 t.shopId === s.id &&
                 t.productId === p.id &&
-                ["running", "needs-review"].includes(t.status)
+                mode !== "recreate" && ["running", "needs-review"].includes(t.status)
               )
                 throw Error(
                   `${s.name} / ${p.config.product.itemCode}：上次结果未确认，请核实草稿，不自动重试`,
                 );
           const baseKey = hash(s.id + "|" + p.id + "|" + v.inputHash),
             baseDir = path.join(this.root, "tasks", baseKey);
-          const records = await taskRecords(baseDir, v.inputHash);
-          if (records.some((r) => r.uncertain))
+          const records = mode === 'recreate' ? [] : await taskRecords(baseDir, v.inputHash);
+          if (mode !== "recreate" && records.some((r) => r.uncertain))
             throw Error(
               `${s.name} / ${p.config.product.itemCode}：上次结果未确认，请核实草稿，不自动重试`,
             );
@@ -432,7 +501,7 @@ export class ListingService extends EventEmitter {
             config,
             status: skip
               ? "already-saved"
-              : mode === "recreate" && previous
+              : mode === "recreate"
                 ? "recreate-ready"
                 : "ready",
             previousSavedAt: previous?.savedAt || null,
@@ -508,7 +577,7 @@ export class ListingService extends EventEmitter {
       })),
       index: 0,
       step: "准备任务",
-      logs: [],
+      logs: [{at:new Date().toISOString(),text:plan.mode==='recreate'?'已建立全新的重建任务，旧任务与回执保留':'任务已建立，准备核对店铺'}],
     };
     try {
       for (const t of this.run.tasks)
@@ -532,7 +601,7 @@ export class ListingService extends EventEmitter {
       throw e;
     }
     this.notify();
-    void this.drive();
+    this.drivePromise = this.drive();
     return this.snapshot();
   }
   async persistRun() {
@@ -543,6 +612,22 @@ export class ListingService extends EventEmitter {
       );
   }
   async drive() {
+    // Background cleanup can reject after the normal execution catch has run.
+    try{await this.driveBatch();}catch(error){
+      this.running=false;this.busyOp=false;
+      if(this.run){
+        this.run.status='needs-review';this.run.finishedAt=new Date().toISOString();
+        this.run.error=(this.run.error?this.run.error+'；':'')+'本地运行收尾失败：'+error.message;
+        this.run.errorCode='RUN_FINALIZE_FAILED';
+        for(const task of this.run.tasks)if(task.status==='running')task.status='needs-review';else if(task.status==='queued')task.status='not-run';
+        this.run.logs.push({at:new Date().toISOString(),text:this.run.error});
+      }
+      try{await this.store.unlock();}catch(e){console.error('任务锁清理失败：'+e.message);}
+      try{await this.persistRun();}catch(e){console.error('运行记录保存失败：'+e.message);}
+      try{this.emit('diagnostic',{type:'run-finalize-failed',runId:this.run?.id,error:error.stack||error.message});this.notify();}catch(e){console.error('运行状态通知失败：'+e.message);}
+    }
+  }
+  async driveBatch() {
     try {
       for (; this.run.index < this.run.tasks.length; this.run.index++) {
         const r = this.run,
@@ -561,11 +646,15 @@ export class ListingService extends EventEmitter {
         const s = this.findShop(t.shopId);
         if (s.securityBlocked)
           throw Error("SAFETY_BLOCKED：该店铺仍处于安全停止状态");
+        r.step = '核对店铺';
+        r.logs.push({at:new Date().toISOString(),task:t.id,text:'正在核对店铺：'+s.name});
+        await this.persistRun();this.notify();
         const verified = await this.browser.verify(s);
         const v = await this.runner.call("validate", { config: t.config });
         if (!v.ok || v.inputHash !== t.inputHash)
           throw Error("商品资料或素材已变化，请重新扫描和预检");
         t.status = "running";
+        r.logs.push({at:new Date().toISOString(),task:t.id,text:(r.mode==='recreate'?'开始独立重建任务：':'开始任务：')+t.shopName+' / '+t.code});
         r.step = "核对店铺后开始填写";
         await writeJson(path.join(t.outputDir, "intent.json"), {
           status: "running",
@@ -579,8 +668,10 @@ export class ListingService extends EventEmitter {
         await this.persistRun();
         this.notify();
         try {
-          const result = await this.runner.call(
-            "run",
+          const execute = (payload,options) => s.platform==='pdd'
+            ? this.browser.runPdd(s,payload,options)
+            : this.runner.call('run',payload,options);
+          const result = await execute(
             {
               config: t.config,
               expectedHash: t.inputHash,
@@ -589,6 +680,9 @@ export class ListingService extends EventEmitter {
               outputDir: t.outputDir,
               workspaceToken: s.workspaceToken,
               attemptId: t.attemptId,
+              batchId:r.id,
+              validation:v,
+              recreate:r.mode==='recreate',
             },
             {
               onEvent: (e) => {
@@ -602,30 +696,31 @@ export class ListingService extends EventEmitter {
                       : "创建本店固定工作页",
                   });
                 }
-                if (e.type === "step-start") r.step = e.name;
+                if (e.type === "step-start") {
+                  r.step = e.name;
+                  r.logs.push({at:e.at||new Date().toISOString(),task:t.id,text:'开始：'+e.name});
+                }
                 if (e.type === "step-complete") {
                   t.timings ||= [];
                   t.timings.push({step:e.name,durationMs:e.durationMs});
+                  r.logs.push({at:e.at||new Date().toISOString(),task:t.id,text:'完成：'+e.name+(Number.isFinite(e.durationMs)?'（'+(e.durationMs/1000).toFixed(1)+'秒）':'')});
                 }
                 if (e.type === "log") {
                   r.logs.push({
-                    at: new Date().toISOString(),
+                    at: e.at || new Date().toISOString(),
                     task: t.id,
                     text: e.text,
                   });
-                  r.logs = r.logs.slice(-1000);
                 }
+                r.logs = r.logs.slice(-1000);
                 if (e.type === "step-start" || e.type === "step-complete") {
                   void this.persistRun().catch((e) => {
                     r.stopRequested = true;
                     r.error = "记录写入失败：" + e.message;
                   });
                   this.notify();
-                } else if (
-                  !this.lastLogAt ||
-                  Date.now() - this.lastLogAt > 1000
-                ) {
-                  this.lastLogAt = Date.now();
+                } else {
+                  void this.persistRun().catch(error=>{r.stopRequested=true;r.error='记录写入失败：'+error.message;});
                   this.notify();
                 }
               },
@@ -667,6 +762,13 @@ export class ListingService extends EventEmitter {
           )
             t.status = "needs-review";
           t.error = e.message;
+          if(e.code)t.errorCode=e.code;
+          if(e.diagnostic)t.diagnostic=e.diagnostic;
+          const failure=s.platform==='pdd'&&!receipt&&t.status==='failed'
+            ? await readJson(path.join(t.outputDir,'product-failure.json')) : null;
+          const continueBatch=failure?.safeToContinue===true&&failure.inputHash===t.inputHash&&failure.attemptId===t.attemptId&&failure.batchId===r.id;
+          r.logs.push({at:new Date().toISOString(),task:t.id,text:(continueBatch?'本商品未保存，已记录失败并继续下一件：':'停止：')+e.message});
+          r.logs = r.logs.slice(-1000);
           await writeJson(path.join(t.outputDir, "intent.json"), {
             status: t.status,
             shopId: t.shopId,
@@ -676,20 +778,30 @@ export class ListingService extends EventEmitter {
             inputHash: t.inputHash,
             error: e.message,
           });
-          throw e;
+          if(!continueBatch)throw e;
         }
         await this.persistRun();
         this.notify();
       }
       if (this.run.status === "running" || this.run.status === "pausing")
-        this.run.status = this.run.stopRequested ? "stopped" : "complete";
+        this.run.status = this.run.stopRequested ? "stopped" : this.run.tasks.some(t=>t.status==='failed')?'complete-with-errors':"complete";
     } catch (e) {
       this.run.status = failureType(e);
       this.run.error = e.message;
+      if(e.code)this.run.errorCode=e.code;
       const t = this.run.tasks[this.run.index];
+      if(this.run.logs.at(-1)?.text!=='停止：'+e.message)this.run.logs.push({at:new Date().toISOString(),task:t?.id,text:'停止：'+e.message});
+      this.run.logs=this.run.logs.slice(-1000);
       if (t) {
         if (t.status === "queued") t.status = failureType(e);
         t.error = e.message;
+        if(e.code)t.errorCode=e.code;
+        if(e.diagnostic)t.diagnostic=e.diagnostic;
+        if(['EGO_USER_CONTROL','EGO_SPACE_INACTIVE','EGO_CONNECTION_LOST','EGO_PERMISSION_DENIED'].includes(e.code)){
+          const shop=this.findShop(t.shopId);shop.verified=false;shop.loggedIn=false;
+          shop.loginStatus=e.code==='EGO_USER_CONTROL'?'awaiting-user':'connection-error';shop.loginError=e.message;
+          await this.saveConfig();
+        }
         if (failureType(e) === "safety-blocked") {
           const s = this.findShop(t.shopId);
           s.securityBlocked = true;
@@ -721,18 +833,24 @@ export class ListingService extends EventEmitter {
   async resume() {
     if (this.run?.status !== "paused")
       throw Error("只有安全暂停的任务才可继续；安全停止不能直接恢复");
+    // "paused" is visible while its drive is still persisting and notifying.
+    // Let that drive finish before changing shared state or starting another.
+    await this.drivePromise;
+    if (this.run?.status !== "paused")
+      throw Error("任务状态已改变，请重新检查当前任务");
     this.run.pauseRequested = false;
     this.run.status = "running";
     await this.persistRun();
     this.notify();
-    void this.drive();
+    this.drivePromise = this.drive();
   }
   async stopAfterCurrent() {
     if (!this.running) throw Error("当前没有运行任务");
+    if (this.run.status === "paused") await this.drivePromise;
     this.run.stopRequested = true;
     if (this.run.status === "paused") {
       this.run.status = "running";
-      void this.drive();
+      this.drivePromise = this.drive();
     } else {
       await this.persistRun();
       this.notify();

@@ -6,9 +6,14 @@ const invoke = async (op, payload = {}) => {
 };
 contextBridge.exposeInMainWorld("wqapp", {
   getState: () => invoke("state"),
+  exportPddTemplate: type => invoke('export-pdd-template',{type}),
   chooseRoot: () => invoke("choose-root"),
+  openMaterial: (id) => invoke("open-material",{id}),
   scan: () => invoke("scan"),
+  setPlatform: (platform) => invoke("set-platform", {platform}),
   mainImageNames: (id, token) => invoke("main-image-names", {id,token}),
+  imageSettings: (id,token,selection) => invoke('image-settings',{id,token,selection}),
+  numberPddImages: id => invoke('number-pdd-images',{id}),
   addShop: (name, platform) => invoke("add-shop", { name, platform }),
   select: (selection) => invoke("select", selection),
   openLogin: (id) => invoke("open-login", { id }),

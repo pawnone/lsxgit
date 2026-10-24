@@ -80,7 +80,9 @@ async function prepare(input, dir) {
     warnings: [...r.warnings, ...v.warnings],
   };
 }
-async function scan({ root, workDir }) {
+async function scan({ root, workDir, platform = "dou" }) {
+  if (platform === "pdd") return (await import("../engine/pdd/product.mjs")).scanProducts(root);
+  if (platform !== "dou") throw Error("不支持的平台");
   const {scanProducts} = await import("../engine/doudian/scan-products.mjs");
   await fs.mkdir(workDir, { recursive: true });
   const manifestFile = path.join(workDir, "scan.json");
@@ -116,6 +118,7 @@ async function scan({ root, workDir }) {
   return { root, products: result, errors };
 }
 async function execute(req) {
+  if(req.config?.platform==='pdd')throw Error('拼多多必须从本店 Ego 工作空间执行');
   const {chromium} = await import("playwright-core");
   const {prepareWorkspace,markWorkspace} = await import("../engine/doudian/workspace.mjs");
   const {validateConfig,executeDraft} = await import("../engine/doudian/run-draft.mjs");
@@ -145,6 +148,7 @@ async function execute(req) {
       token: req.workspaceToken,
       expectedShop,
       attemptId: req.attemptId,
+      recreate: req.recreate === true,
     });
     emit({
       type: "workspace",
@@ -221,12 +225,17 @@ try {
   const { op, payload } = JSON.parse(input);
   let result;
   if (op === "scan") result = await scan(payload);
+  else if (["observe", "verify", "focus"].includes(op) && payload.platform === "pdd") {
+    const module = await import("../engine/pdd/shop-observation.mjs");
+    result = await module[{observe:"observeShop",verify:"inspectShop",focus:"focusShop"}[op]](payload.endpoint,payload.expectedShop);
+  }
   else if (op === "observe")
     result = await (await import("../engine/doudian/shop-observation.mjs")).observeShop(payload.endpoint, payload.expectedShop);
   else if (op === "focus")
     result = await (await import("../engine/doudian/shop-observation.mjs")).focusShop(payload.endpoint, payload.expectedShop);
   else if (op === "verify")
     result = await (await import("../engine/doudian/shop-guard.mjs")).inspectShop(payload.endpoint, payload.expectedShop);
+  else if (op === "validate" && payload.config?.platform === "pdd") result = await (await import("../engine/pdd/product.mjs")).validateConfig(payload.config);
   else if (op === "validate") {
     const {validateConfig} = await import("../engine/doudian/run-draft.mjs");
     const v = await validateConfig(payload.config);

@@ -1,0 +1,90 @@
+{
+  "name": "pdd-local-core",
+  "version": "0.1.2",
+  "source": "existing user-owned pdd-local-core v0.1.2 source, matched against the desktop complete package",
+  "baselineCapabilities": "Excel parsing, SKU expansion, pure observation and workflow models",
+  "files": [
+    {
+      "file": "core/prepare-product.mjs",
+      "sha256": "4742a188dbb85ce0318fa01258b2347481e4685e85f79a633080a2ca24acb435",
+      "modified": false
+    },
+    {
+      "file": "core/form-review.mjs",
+      "sha256": "9b99c4235998e6333fb9372c734e8d02c172e20d464acdf00e3fe657c465de72",
+      "modified": false
+    },
+    {
+      "file": "core/workflow.mjs",
+      "sha256": "d0c870b5721e6019af8e6fdf9950959116335b19461a62cc2f2b5be287a3a11e",
+      "modified": false
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "exceljs",
+      "version": "4.4.0",
+      "license": "MIT",
+      "source": "https://github.com/exceljs/exceljs"
+    },
+    {
+      "name": "playwright-core",
+      "version": "1.64.0",
+      "license": "Apache-2.0",
+      "source": "https://github.com/microsoft/playwright"
+    },
+    {
+      "name": "image-size",
+      "version": "2.0.4",
+      "license": "MIT",
+      "source": "https://codeberg.org/image-size/image-size",
+      "purpose": "Read actual image format and dimensions before uploading; Node >=18, compatible with the App runtime"
+    }
+  ],
+  "notes": [
+    "Core files are preserved byte-for-byte. Browser adapters are separate additions and require real merchant acceptance before delivery.",
+    "No actual product workbook, materials, browser profiles or receipts are vendored.",
+    "2026-10-21: user designated run-full v2.1 as full-flow baseline; media functionality is ported from that workflow and repaired with scoped previews, loading-placeholder exclusion, ordered uploads and persisted receipts. Local native Ego inspection is development only, not an App runtime dependency. Packaging upload awaits a valid real image; no draft saved.",
+    "2026-10-21: detail plan now contains exactly 17 slots: one size chart first, existing details, then cycling main images. Original files are unchanged; complete receipts must match the current ordered plan. Local offline upload tests cover repeated slots and idempotency; merchant 17-image acceptance is pending.",
+    "2026-10-21: real merchant detail module acceptance passed: confirmed existing six slots, appended eleven to total seventeen, and rerun dispatched zero uploads. Size chart is first and appears once. Full entry execution/save acceptance remains pending.",
+    "2026-10-21: user changed acceptance order: integrate into Mac App first for manual merchant testing. Ego is now an explicit installed runtime dependency for PDD, reached via the official ego-browser CLI and Page API. Added platform-specific roots, shop guards, full form pipeline, service readback, save intent and reopened draft checks. Full merchant save remains unverified; original invalid packaging image still blocks source preflight. Windows unchanged.",
+    "2026-10-22 v0.4.1: read-only inspection of the user-opened 时尚套装 draft distinguished required sibling asterisks from orange recommendations. The separate adapter relaxes optional workbook/media inputs, discovers aliases and root workbooks, skips invalid optional media with warnings, and retains mandatory numeric/source/shop/save guards. No reference-draft mutation. Supersedes v0.4.0 invalid optional packaging preflight blocker. Full merchant save remains unverified.",
+    "2026-10-22 v0.4.2: explicit user instruction supersedes old pending-result recreation block. Recreate uses a new attempt and blank page, archives prior workspace metadata and preserves receipts. Ordinary replay remains blocked. Explicit recreation authorizes initial Ego takeover only; control failures still stop. Event journals support live App progress despite CLI console buffering.",
+    "2026-10-22 v0.4.3: reproduced cold-entry upload receiving files but remaining at zero. Wait for the page-owned product initialization and a stable window, use the visible local-upload chooser, and observe upload progress with guards. Real-page checks also repaired automatic category advancement, dependent attribute readiness, horizontal/document scrolling, collapsed service editor, display-based freight selection and editable discount values. Core source files remain unchanged; full acceptance evidence is recorded separately.",
+    "2026-10-22 v0.4.3 persistence: observed the draft-specific 保存成功! modal after one actual save. Read-only reopening verified all fields and twenty migrated detail/style images; PDD recompresses temporary PFS images into permanent goods URLs. Added bounded same-slot image-content/aspect comparison for this specific migration, preserving count/order/origin checks. The old timeout report is retained, no save was repeated for that inspection. Final installed-App acceptance is recorded in APP检查记录.md.",
+    "2026-10-22 v0.4.5: reuse the existing Apache-2.0 Playwright native multi-file API and Ego official Page API, with no new dependencies. Submit images once per region using frozen-source cache slots, compare actual same-slot decoded content, and start merchant video before form filling. Browser actions stay serial; guarded video observation and complete media receipts still gate saving. Real merchant acceptance is not implied by local checks.",
+    "2026-10-22 v0.4.6: observed the actual failed period-presale 10-day option outside its dropdown scrolling viewport, with an underlying form div receiving the click. Reserve room before opening all selects, wait for native scroll/layout stability, expose options inside their own portal/list clipping bounds, and verify exact text before native clicks. No force or DOM-value mutation; new footer/long-list/multi-select regressions.",
+    "2026-10-22 v0.4.7: reuse ExcelJS MIT to discover workbook data by labels and create an in-memory legacy-core view; source rows/columns are not rewritten. Add the observed knit category, native ingredient percentages and Chinese letter sizes. Compact promotion rate derives the observed fixed two-item threshold. Dispatch style uploads serially before one shared wait and retain one complete pre-save review plus reopened persistence verification. Core byte hashes remain unchanged. Acceptance evidence is recorded separately.",
+    "2026-10-22 v0.4.8: user confirmed product-level goods code equals Excel item number. Prefer 商品货号 over optional legacy 商品编码; retain legacy-only fallback, native fill and explicit readback before and after save. SKU codes unchanged. Reference price remains user-provided workbook data; no fixed value, inference or source workbook rewrite. Core source hashes unchanged.",
+    "2026-10-23 v0.4.9: inspected the merchant name-blur validation callback, which captures and later restores a whole style row. Native delayed-response regression reproduces the old nonempty-note loss. Enter note before name so validation preserves it; no source workbook changes, added delay, dependency or automatic retry. Input mismatch reports field and expected/actual values. Core files remain unchanged.",
+    "2026-10-23 v0.4.10: explicit user instruction supersedes post-save reopening. Complete field/media/source review occurs once before saving; only the fresh draft-specific acknowledgement is observed after dispatch. Receipt verification.stage is before-save and saveAcknowledgement is stored separately. Pending intent, stale-notice rejection and no automatic retry remain. No post-save field/navigation check is claimed.",
+    "2026-10-23 v0.4.10 acceptance: the next knit item exposed a stale material row index while search filtering replaced the list. Native exact-text XPath inside the material panel replaces that positional selector, retaining driver identity/text/publish guards. Local regression moves results between discovery and click; no delay or automatic retry is added. The successful set receipt and failed knit attempt remain intact.",
+    "2026-10-23 v0.4.10 cold entry: the title control can appear while the merchant header is still empty. Wait for a visible nonempty shop label together with the title, then apply the unchanged exact-name guard. Do not treat a blank loading header as a different shop or upload before identity is known. A separately inspected empty entry was refreshed once during diagnosis; no runtime auto-refresh/retry was added.",
+    "2026-10-23 v0.4.11: reuse installed ExcelJS 4.4.0 MIT rich text, validation and conditional formatting support. Adapt the approved switchable two-category workbook outside the byte-preserved core. Actual type selects known category rules; inactive fields and explanatory layout are ignored, formula price caches are rejected, semantic input hashing excludes formatting while frozen source bytes remain guarded. Ordinary PDD failures may advance only with exact same-attempt/batch proof that saving never started and shop/safety guards passed. Uncertain saves, login, identity and control failures stop. Mac acceptance is recorded separately; Dou and Windows are unchanged.",
+    "2026-10-23 v0.4.13 Windows feedback: reuse documented Ego waitForFileChooser/setFiles for detail local-upload buttons, verify this native FileList event before waiting on platform progress, and wait for early-started video to finish before dispatching detail images. Keep bulk 10/17 slots and content/order gates. Classify user control, inactive/ended space, transport loss and denied permission separately; preserve diagnostic and CLI exit evidence without automatic takeover/retry. Local native regressions are not Windows merchant acceptance.",
+    "2026-10-23 v0.4.14: Windows multi-image cache uses a short TEMP directory, preserving frozen source bytes; details append batches of at most five with cumulative prefix/content/order confirmation. Native FileList byte counts and decoded dimensions are compared with local files, with paths and precise errors retained. Detail controls are re-resolved by business tracking attributes. Original image plan, first size chart, shared main first, main10, video overlap, save gate and no uncertain replay remain. Windows real merchant acceptance is pending; no Git submission or Mac installed update."
+  ],
+  "fullScriptBaseline": {
+    "entry": "pdd-auto-listing/run-full.mjs",
+    "headerVersion": "2.1",
+    "packageVersion": "0.3.1-local-review",
+    "receivedSha256": "78830a75c6ec2cd93520645e1c42a0a9dca4b9056867ddf0dc16c8df5f5b9faf",
+    "revisedSha256": "eef073e4bf8df324f1bd5286d5d60925e2ecdf863f30d538e1a404cbd0dd8a74",
+    "revisionDate": "2026-10-21",
+    "status": "Media stages checked locally; full browser execution and saving remain guarded pending complete real inputs and acceptance."
+  },
+  "mediaModules": [
+    {
+      "file": "media.mjs",
+      "sha256": "ce85796d5fbf52003c34f2aaf5b9eabed652b557033864b4a95cd93b68460f23",
+      "source": "user-designated pdd-auto-listing/browser/media.mjs",
+      "modifiedAfterLocalSync": true
+    },
+    {
+      "file": "full-media.mjs",
+      "sha256": "cf557ded8b1028a1150b9a30c2b1059283c9def0f1869bd0af603656a6f383e5",
+      "source": "user-designated pdd-auto-listing/browser/full-media.mjs",
+      "modifiedAfterLocalSync": true
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const {
   powerSaveBlocker,
   Tray,
   nativeImage,
+  screen,
 } = require("electron");
 const path = require("node:path"),
   fs = require("node:fs/promises"),
@@ -37,17 +38,25 @@ const media = new Map(),
   tokens = new Map(),
   APP_URL = "wqapp://app/index.html";
 const project = path.resolve(__dirname, "..");
+function recordRuntimeFailure(type,details){
+  try{
+    const io=require('node:fs'),root=app.getPath('userData');io.mkdirSync(root,{recursive:true});
+    io.appendFileSync(path.join(root,'runtime-errors.jsonl'),JSON.stringify({at:new Date().toISOString(),version:app.getVersion(),type,
+      details:details instanceof Error?{message:details.message,stack:details.stack}:details})+'\n');
+  }catch(error){console.error('诊断记录写入失败：'+error.message);}
+}
+process.on('uncaughtExceptionMonitor',error=>recordRuntimeFailure('uncaught-exception',error));
+app.on('child-process-gone',(_event,details)=>recordRuntimeFailure('child-process-gone',details));
+function mediaUrl(file){
+  let token=tokens.get(file);
+  if(!token){token=crypto.randomUUID();tokens.set(file,token);media.set(token,file);}
+  return 'wqasset://media/'+token;
+}
 function publicState() {
   const s = service.snapshot();
   for (const p of s.products)
     if (p.image) {
-      let token = tokens.get(p.image);
-      if (!token) {
-        token = crypto.randomUUID();
-        tokens.set(p.image, token);
-        media.set(token, p.image);
-      }
-      p.image = "wqasset://media/" + token;
+      p.image = mediaUrl(p.image);
     }
   return s;
 }
@@ -58,14 +67,27 @@ function showWindow() {
 }
 function sendState() {
   background?.update(service.run, service.running);
-  if (win && !win.isDestroyed())
-    win.webContents.send("wqapp:state", publicState());
+  if (win && !win.isDestroyed()&&!win.webContents.isDestroyed()){
+    try{win.webContents.send("wqapp:state", publicState());}catch(error){recordRuntimeFailure('state-delivery-failed',error);}
+  }
   if (exitAfterCurrent && !service.running) app.quit();
 }
 async function handle(op, p = {}) {
   switch (op) {
     case "state":
       return publicState();
+    case 'export-pdd-template':{
+      service.ensureIdle();
+      if(service.config.platform!=='pdd'||!['时尚套装','针织衫'].includes(p.type))throw Error('请选择支持的拼多多模板');
+      const name='拼多多商品信息模板_'+p.type+'.xlsx';
+      const out=await dialog.showSaveDialog(win,{title:'保存拼多多空白模板',defaultPath:name,filters:[{name:'Excel',extensions:['xlsx']}]});
+      if(out.canceled)return false;
+      const target=path.resolve(out.filePath);
+      if(path.extname(target).toLowerCase()!=='.xlsx')throw Error('商品模板须保存为.xlsx');
+      if(service.catalog.some(product=>path.resolve(product.materialRoot,product.config?.input?.infoPath||'')===target))throw Error('请另存空白模板，不能覆盖当前商品信息表');
+      await fs.copyFile(path.join(__dirname,'assets','pdd-templates',name),target);
+      return true;
+    }
     case "choose-root": {
       service.ensureIdle();
       const d = await dialog.showOpenDialog(win, {
@@ -77,6 +99,23 @@ async function handle(op, p = {}) {
     }
     case "main-image-names":
       return service.mainImageNames(p.id,p.token);
+    case 'image-settings':{
+      const result=await service.imageSettings(p.id,p.token,p.selection);
+      if(result.pictures)result.pictures=result.pictures.map(item=>({...item,image:mediaUrl(item.image)}));
+      return result;
+    }
+    case 'number-pdd-images':
+      return service.numberPddImages(p.id);
+    case "open-material": {
+      const product=service.catalog.find(item=>item.id===p.id);
+      if(!product)throw Error('未找到本次扫描的商品');
+      const error=await shell.openPath(product.materialRoot);
+      if(error)throw Error(error);
+      return true;
+    }
+    case "set-platform":
+      await service.setPlatform(p.platform);
+      return publicState();
     case "scan":
       await service.scan();
       return publicState();
@@ -218,12 +257,13 @@ else {
           return new Response("Not found", { status: 404 });
         }
       });
+      const workArea=screen.getPrimaryDisplay().workAreaSize;
       win = new BrowserWindow({
         title: "文青尚品",
-        width: 1440,
-        height: 1000,
-        minWidth: 1024,
-        minHeight: 740,
+        width: Math.min(1440,workArea.width),
+        height: Math.min(1000,workArea.height),
+        minWidth: Math.min(1024,workArea.width),
+        minHeight: Math.min(740,workArea.height),
         show: false,
         backgroundColor: "#f6f8fb",
         titleBarStyle:
@@ -238,6 +278,8 @@ else {
         },
       });
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      win.webContents.on('render-process-gone',(_event,details)=>recordRuntimeFailure('render-process-gone',details));
+      win.on('unresponsive',()=>recordRuntimeFailure('window-unresponsive',{runId:service.run?.id}));
       win.webContents.on("will-navigate", (event, url) => {
         if (url !== APP_URL) event.preventDefault();
       });
@@ -272,6 +314,7 @@ else {
       tray.on("click", showWindow);
       win.on("focus", () => { win.flashFrame(false); win.setTitle("文青尚品"); });
       service.on("state", sendState);
+      service.on('diagnostic',details=>recordRuntimeFailure('service-error',details));
       win.on("close", (event) => {
         if (service.running) {
           event.preventDefault();
@@ -291,7 +334,7 @@ else {
                 await service.stopAfterCurrent();
               }
               win.hide();
-            });
+            }).catch(error=>recordRuntimeFailure('close-window-failed',error));
         }
       });
       win.once("ready-to-show", () => win.show());

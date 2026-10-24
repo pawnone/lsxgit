@@ -11,3 +11,6 @@
 - 本项目代码尚未授予额外开源许可证，package.json标为UNLICENSED。公开仓库不自动改变原素材及第三方组件的许可。
 
 实现前检查了上述官方来源、许可证和与现有Node执行器的兼容性；锁定版本由package-lock.json管理。Electron与Packager已确认官方仓库维护中；本次在macOS arm64真实构建并检查，不据此声称Windows已通过。
+
+- cross-spawn 7.0.6，https://github.com/moxystudio/node-cross-spawn ，MIT。复用已安装组件并声明为生产依赖，用于Windows命令入口及路径转义；许可证随node_modules分发。
+- 随Windows交付的ego-lite-setup.exe由用户提供，PE版本0.6.0.16，版权CITRO LABS PTE. LIMITED；它是第三方安装引导器，不属于本项目开源代码，原文件未改写。不自动升级已有Ego，首次引导由用户完成。

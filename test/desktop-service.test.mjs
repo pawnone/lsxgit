@@ -67,6 +67,16 @@ async function finished(s) {
   assert.equal(s.running, false);
 }
 
+test('后台收尾写入失败不会产生未处理拒绝，释放任务锁并保留待核实状态',async t=>{
+  const {s}=await setup(t,{fail:'synthetic execution failure'});
+  await s.check();const persist=s.persistRun.bind(s);let failOnce=true;
+  s.persistRun=async()=>{if(s.run?.finishedAt&&failOnce){failOnce=false;throw Error('synthetic final write failure');}return persist();};
+  await s.start(s.preflight.token);await s.drivePromise;
+  assert.equal(s.running,false);assert.equal(s.run.status,'needs-review');assert.equal(s.run.errorCode,'RUN_FINALIZE_FAILED');
+  assert.match(s.run.error,/synthetic final write failure/);s.ensureIdle();
+  assert.equal(await fs.stat(path.join(s.root,'app-run.lock')).catch(()=>null),null);
+});
+
 test("native queue freezes two shops × two products, exact draft-only targets and four receipts", async (t) => {
   const { s, executions } = await setup(t);
   await s.check();
@@ -144,16 +154,32 @@ test("pause occurs after current product and resume preserves frozen targets", a
       }
     },
   });
+  let pausePersisted, finishPause;
+  const pausePersistedP = new Promise(r => { pausePersisted = r; });
+  const finishPauseP = new Promise(r => { finishPause = r; });
+  const originalPersist = s.persistRun.bind(s);
+  s.persistRun = async () => {
+    if (s.run?.status === "paused") {
+      pausePersisted();
+      await finishPauseP;
+    }
+    return originalPersist();
+  };
+  t.after(() => finishPause());
   await s.check();
   await s.start(s.preflight.token);
   await enteredP;
   await s.pause();
   release();
-  for (let n = 0; n < 100 && s.run.status !== "paused"; n++)
-    await new Promise((r) => setTimeout(r, 10));
+  await pausePersistedP;
   assert.equal(s.run.status, "paused");
   assert.equal(executions.length, 1);
-  await s.resume();
+  const resumed = s.resume();
+  await new Promise(r => setImmediate(r));
+  assert.equal(s.run.status, "paused", "旧执行器尚未收尾时不能开始下一轮");
+  assert.equal(executions.length, 1);
+  finishPause();
+  await resumed;
   await finished(s);
   assert.equal(executions.length, 4);
 });
@@ -179,6 +205,33 @@ test("interrupted run requires review; dead process lock recovers but ledger nev
   await next.scan();
   for (const shop of next.config.shops) await next.verify(shop.id);
   await assert.rejects(next.check(), /上次结果未确认/);
+});
+
+test("stop during pause finalization waits for the old drive and records one final result", async t => {
+  let entered, release, paused, finishPause;
+  const enteredP = new Promise(r => { entered = r; });
+  const releaseP = new Promise(r => { release = r; });
+  const pausedP = new Promise(r => { paused = r; });
+  const finishPauseP = new Promise(r => { finishPause = r; });
+  const { s, executions } = await setup(t, { wait: async () => { entered(); await releaseP; } });
+  const originalPersist = s.persistRun.bind(s);
+  s.persistRun = async () => {
+    if (s.run?.status === "paused") { paused(); await finishPauseP; }
+    return originalPersist();
+  };
+  t.after(() => { release(); finishPause(); });
+  await s.check(); await s.start(s.preflight.token); await enteredP;
+  await s.pause(); release(); await pausedP;
+  const stopped = s.stopAfterCurrent();
+  await new Promise(r => setImmediate(r));
+  assert.equal(s.run.status, "paused");
+  assert.equal(s.history.length, 0);
+  finishPause(); await stopped; await finished(s);
+  assert.equal(s.run.status, "stopped");
+  assert.equal(executions.length, 1);
+  assert.equal(s.history.filter(r => r.id === s.run.id).length, 1);
+  assert.equal(s.run.tasks.filter(t => t.status === "confirmed").length, 1);
+  assert.equal(s.run.tasks.filter(t => t.status === "not-run").length, 3);
 });
 test("live process lock and corrupt records refuse reset", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "wq-lock-"));
@@ -239,7 +292,7 @@ test("explicit recreate keeps old receipts and makes four new isolated attempts"
   assert.notEqual(executions[0].workspaceToken, executions[2].workspaceToken);
 });
 
-test("legacy receipts skip normally, recreate append-only; unknown cannot recreate", async (t) => {
+test("legacy receipts skip normally; explicit recreate overrides unknown and keeps old records", async (t) => {
   const { s } = await setup(t);
   await s.check();
   const first = s.preflight.tasks[0],
@@ -258,7 +311,9 @@ test("legacy receipts skip normally, recreate append-only; unknown cannot recrea
   await writeJson(path.join(s.preflight.tasks[0].outputDir, "intent.json"), {
     status: "needs-review",
   });
-  await assert.rejects(s.check({ mode: "recreate" }), /上次结果未确认/);
+  await assert.rejects(s.check(), /上次结果未确认/);
+  await s.check({ mode: "recreate" });
+  assert(s.preflight.tasks.every(t=>t.status==='recreate-ready'));
   assert.equal((await readJson(file)).status, "confirmed");
 });
 

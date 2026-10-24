@@ -3,9 +3,23 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { managedEndpoint } from "../engine/doudian/managed-browser.mjs";
+import {EgoRunner} from './ego-runner.mjs';
+const homePages = {
+  dou: "https://fxg.jinritemai.com",
+  pdd: "https://mms.pinduoduo.com",
+};
 export class BrowserManager {
   constructor({ root, runner, executable } = {}) {
     Object.assign(this, { root, runner, executable });
+    this.ego = new EgoRunner({root:path.join(root ? path.dirname(root) : os.tmpdir(),'ego-requests')});
+  }
+  egoPayload(shop) {
+    return {expectedShop:shop.name,workspaceName:'文青尚品 · 拼多多 · '+shop.name+' · '+shop.workspaceToken.slice(0,8),
+      workspaceFile:path.join(path.dirname(this.root),'ego-workspaces',shop.workspaceToken+'.json')};
+  }
+  async runPdd(shop,payload,options) {
+    if(shop.platform!=='pdd')throw Error('Ego 仅用于拼多多');
+    return this.ego.call('run',{...payload,...this.egoPayload(shop)},options);
   }
   profile(shop) {
     return path.join(this.root, shop.loginProfileId || shop.id);
@@ -36,11 +50,14 @@ export class BrowserManager {
     );
   }
   async open(shop) {
+    const platform = shop.platform || "dou";
+    if (!Object.hasOwn(homePages, platform)) throw Error("不支持的浏览器登录平台");
+    if(platform==='pdd') return this.ego.call('open',this.egoPayload(shop),{timeout:60000});
     const existing = await this.endpoint(shop);
     if (existing) {
       await this.runner.call(
         "focus",
-        { endpoint: existing, expectedShop: shop.name },
+        { endpoint: existing, expectedShop: shop.name, platform },
         { timeout: 20000 },
       );
       return { ready: true, reused: true };
@@ -59,7 +76,7 @@ export class BrowserManager {
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
         "--disable-backgrounding-occluded-windows",
-        "https://fxg.jinritemai.com",
+        homePages[platform],
       ],
       { detached: true, stdio: "ignore", shell: false },
     );
@@ -76,23 +93,28 @@ export class BrowserManager {
     );
   }
   async observe(shop) {
+    if(shop.platform==='pdd')return this.ego.call('observe',this.egoPayload(shop),{timeout:30000});
     const endpoint = await this.endpoint(shop);
     if (!endpoint)
       return { status: "browser-closed", loggedIn: false, actualName: null };
     const state = await this.runner.call(
       "observe",
-      { endpoint, expectedShop: shop.name },
+      { endpoint, expectedShop: shop.name, platform: shop.platform || "dou" },
       { timeout: 30000 },
     );
     return { ...state, endpoint };
   }
   async verify(shop) {
+    if(shop.platform==='pdd') {
+      const evidence=await this.ego.call('verify',this.egoPayload(shop),{timeout:60000});
+      return{endpoint:'ego:'+shop.workspaceToken,evidence};
+    }
     const endpoint = await this.endpoint(shop);
     if (!endpoint)
       throw Error("请先点击登录店铺，打开该店专用浏览器并完成人工登录");
     const evidence = await this.runner.call(
       "verify",
-      { endpoint, expectedShop: shop.name },
+      { endpoint, expectedShop: shop.name, platform: shop.platform || "dou" },
       { timeout: 60000 },
     );
     return { endpoint, evidence };

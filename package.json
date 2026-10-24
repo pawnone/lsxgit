@@ -1,8 +1,8 @@
 {
   "name": "wenqing-shangpin",
-  "version": "0.3.7-alpha",
+  "version": "0.4.14-alpha",
   "private": true,
-  "description": "文青尚品本机桌面APP：抖店多店多商品自动保存草稿",
+  "description": "文青尚品本机桌面APP：抖店与拼多多串行保存草稿",
   "type": "commonjs",
   "license": "UNLICENSED",
   "engines": {
@@ -34,7 +34,9 @@
     "url": "https://github.com/pawnone/lsxgit.git"
   },
   "dependencies": {
+    "cross-spawn": "7.0.6",
     "exceljs": "4.4.0",
+    "image-size": "2.0.4",
     "playwright-core": "1.64.0"
   },
   "main": "desktop/main.cjs"

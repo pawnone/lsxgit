@@ -5,6 +5,7 @@ node_modules/
 !.env.example
 *.log
 *.xlsx
+!desktop/assets/pdd-templates/*.xlsx
 *.xls
 *.mp4
 *.mov

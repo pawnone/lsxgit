@@ -1,0 +1,23 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {NtExecutable,NtExecutableResource,Resource} from 'resedit';
+import {scanProducts} from '../engine/pdd/product.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),dir=path.resolve(process.argv[2]||path.join(root,'release/文青尚品-win32-x64')),app=path.join(dir,'resources/app');
+const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex'),pkg=JSON.parse(await fs.readFile(path.join(root,'package.json'),'utf8'));
+const exe=await fs.readFile(path.join(dir,'文青尚品.exe')),peOffset=exe.readUInt32LE(0x3c);assert.equal(exe.readUInt16LE(peOffset+4),0x8664,'App必须为AMD64');assert.equal(exe.readUInt16LE(peOffset+24),0x20b,'App必须为PE32+');
+const resources=NtExecutableResource.from(NtExecutable.from(exe,{ignoreCert:true}));const versions=Resource.VersionInfo.fromEntries(resources.entries).flatMap(v=>v.getAllLanguagesForStringValues().map(l=>v.getStringValues(l)));assert(versions.some(v=>v.ProductVersion===pkg.version),'EXE产品版本必须匹配本轮源码');assert.equal((await fs.readFile(path.join(dir,'version'),'utf8')).trim(),pkg.devDependencies.electron);
+const {private:privatePackage,scripts,devDependencies,...runtimePackage}=pkg;
+assert.deepEqual(JSON.parse(await fs.readFile(path.join(app,'package.json'),'utf8')),runtimePackage);
+let sourceFiles=0;async function compare(relative){for(const entry of await fs.readdir(path.join(root,relative),{withFileTypes:true})){const file=path.join(relative,entry.name);if(entry.isDirectory())await compare(file);else{assert.deepEqual(await fs.readFile(path.join(app,file)),await fs.readFile(path.join(root,file)),file+'不一致');sourceFiles++;}}}await compare('desktop');await compare('engine');
+for(const name of ['cross-spawn','exceljs','playwright-core','image-size']){const p=JSON.parse(await fs.readFile(path.join(app,'node_modules',name,'package.json'),'utf8'));assert.equal(p.version,pkg.dependencies[name]);}
+const manifest=JSON.parse(await fs.readFile(path.join(dir,'environment-manifest.json'),'utf8'));assert.equal(manifest.appVersion,pkg.version);assert.equal(hash(await fs.readFile(path.join(dir,'environment',manifest.egoInstaller.file))),manifest.egoInstaller.sha256);assert.equal(manifest.egoInstaller.sha256,'88ddf980821be2a7c745bec0e16b6ce623d3117c02df7720c2a57c35edb70f33');
+assert.deepEqual(await fs.readFile(path.join(dir,'Windows详情上传排查提示词.txt')),await fs.readFile(path.join(root,'Windows详情上传排查提示词.txt')));
+for(const [source,name]of [['windows-environment.ps1','setup-environment.ps1'],['windows-environment.cmd','一键配置环境.cmd'],['windows-setup.ps1','install-shortcuts.ps1']])assert.deepEqual(await fs.readFile(path.join(root,'scripts',source)),await fs.readFile(path.join(dir,name)));
+const ps=await fs.readFile(path.join(dir,'setup-environment.ps1'));assert.equal(ps.subarray(0,3).toString('hex'),'efbbbf','Windows PowerShell5.1需要UTF-8 BOM');const cmd=await fs.readFile(path.join(dir,'一键配置环境.cmd'),'utf8');assert(/^[\x00-\x7f]+$/.test(cmd));assert(!/(?<!\r)\n/.test(cmd),'CMD必须为CRLF');
+const sampleManifest=JSON.parse(await fs.readFile(path.join(dir,'模板素材清单.json'),'utf8'));for(const file of sampleManifest.files)assert.equal(hash(await fs.readFile(path.join(dir,'拼多多模板素材库',file.file))),file.sha256);
+const library=await scanProducts(path.join(dir,'拼多多模板素材库'));assert.equal(library.errors.length,0);assert.equal(library.products.length,2);assert(library.products.every(p=>p.ok));assert.deepEqual(library.products.map(p=>p.config.skuMatrix.length).sort((a,b)=>a-b),[4,12]);
+const forbidden=[];async function inspect(folder){for(const e of await fs.readdir(folder,{withFileTypes:true})){const f=path.join(folder,e.name),r=path.relative(dir,f).split(path.sep).join('/');if(/(?:^|\/)(?:\.git|profiles?|browser-profiles|ego-requests|ego-workspaces|tasks|runs|output|\.DS_Store)(?:\/|$)|(?:^|\/)~\$|(?:^|\/)\.~lock\./i.test(r))forbidden.push(r);if(e.isDirectory())await inspect(f);}}await inspect(dir);assert.deepEqual(forbidden,[],'禁止打入登录与执行记录');
+const result={ok:true,appVersion:pkg.version,electron:pkg.devDependencies.electron,platform:'win32',arch:'x64',sourceFiles,installerVersion:manifest.egoInstaller.version,installerSha256:manifest.egoInstaller.sha256,templateProducts:sampleManifest.products,materialFiles:sampleManifest.files.length,actualWindows:false};console.log(JSON.stringify(result,null,2));

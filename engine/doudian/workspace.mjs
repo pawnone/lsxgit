@@ -29,7 +29,7 @@ export async function markWorkspace(page, token, changes) {
 }
 export async function prepareWorkspace(
   browser,
-  { token, expectedShop, attemptId },
+  { token, expectedShop, attemptId, recreate = false },
 ) {
   if (!token || !expectedShop || !attemptId)
     throw Error("工作页缺少店铺或执行标识");
@@ -37,7 +37,7 @@ export async function prepareWorkspace(
   for (const page of browser.contexts().flatMap((c) => c.pages())) {
     if (new URL(page.url()).origin !== ORIGIN) continue;
     const state = await workspaceState(page);
-    if (state?.token === token) matches.push({ page, state });
+    if (state?.token === token && !state.retired) matches.push({ page, state });
   }
   if (matches.length > 1)
     throw Error(
@@ -46,9 +46,10 @@ export async function prepareWorkspace(
   let page,
     state,
     created = false;
+  if (matches.some(m=>m.state.attemptId===attemptId))throw Error('不能重复执行同一个任务，请重新创建草稿建立新任务');
   if (matches.length) {
     ({ page, state } = matches[0]);
-    if (["running", "saving", "needs-review"].includes(state.phase))
+    if (!recreate && ["running", "saving", "needs-review"].includes(state.phase))
       throw Error("工作页上次结果未知，请先核实草稿，禁止自动清空或重试");
   } else {
     const context = browser.contexts()[0];
@@ -68,6 +69,7 @@ export async function prepareWorkspace(
     expectedShop,
     startedAt: new Date().toISOString(),
     previousAttemptId: state?.attemptId || null,
+    previousState: recreate && state ? {phase:state.phase,attemptId:state.attemptId,startedAt:state.startedAt} : null,
   });
   return { page, created, previousAttemptId: state?.attemptId || null };
 }
